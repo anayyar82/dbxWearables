@@ -13,17 +13,67 @@
 This project is in early initialization. The repository currently contains only:
 - `README.md` — project description
 - `LICENSE` — MIT license
+- `CLAUDE.md` — this file
 
 No source code, build configuration, tests, or CI/CD pipelines exist yet.
 
+## Architecture
+
+The initial implementation targets **Apple HealthKit** as the first data source. The end-to-end data flow is:
+
+```
+┌─────────────────┐     JSON POST     ┌──────────────────────────────────┐
+│  Apple HealthKit │ ───────────────►  │  Databricks App (AppKit)         │
+│  (Apple Watch /  │                   │  ┌────────────┐  ┌────────────┐ │
+│   Health app)    │                   │  │  REST API   │─►│ ZeroBus SDK│ │
+└─────────────────┘                   │  └────────────┘  └─────┬──────┘ │
+                                       └────────────────────────┼────────┘
+                                                                │ stream
+                                                                ▼
+                                       ┌────────────────────────────────┐
+                                       │  Unity Catalog Bronze Table     │
+                                       │  (key-value style, VARIANT)     │
+                                       └───────────────┬────────────────┘
+                                                       │ read
+                                                       ▼
+                                       ┌────────────────────────────────┐
+                                       │  Spark Declarative Pipeline     │
+                                       │  (silver → gold processing)     │
+                                       └────────────────────────────────┘
+```
+
+### Component Responsibilities
+
+1. **Apple HealthKit** — Source system. Apple Watch and apps that share data to Apple's Health app post standard activity measures as a JSON payload to the REST API.
+
+2. **Databricks App (AppKit)** — Hosts a REST API endpoint that receives the HealthKit JSON POST. The app forwards the request payload and metadata (headers, etc.) to the ZeroBus SDK running within the same app process.
+
+3. **ZeroBus SDK** — Streams the received data into a Unity Catalog bronze table. Decouples the REST API from table writes, providing streaming semantics without external infrastructure.
+
+4. **Unity Catalog Bronze Table** — Schema-on-read storage. The full HealthKit JSON body is stored as a `VARIANT` column. Additional columns capture request metadata:
+   - Record GUID
+   - Record timestamp
+   - Forwarded request headers
+   - (Exact schema TBD)
+
+5. **Spark Declarative Pipeline** — Reads from the bronze table and processes data through silver (cleaned/validated) and gold (aggregated) layers.
+
+### Key Design Decisions
+
+- **Schema-on-read at bronze** — Storing raw HealthKit JSON as `VARIANT` keeps ingestion flexible and avoids coupling intake to any specific HealthKit data structure.
+- **Request metadata preserved** — HTTP headers and context travel alongside the payload for auditing, deduplication, and debugging.
+- **ZeroBus as the bridge** — Decouples the REST API from table writes, providing streaming semantics without managing Kafka or similar infrastructure directly.
+- **Apple HealthKit first** — The architecture is designed to start with HealthKit but can extend to other wearable sources (Fitbit, Garmin, etc.) by adding new ingestion endpoints that feed the same bronze table pattern.
+
 ## Technology Stack
 
-The intended stack (from README) includes:
-- **AppKit** — Databricks application framework
-- **ZeroBus** — event/message bus for data ingestion
+- **AppKit** — Databricks application framework (hosts the REST API)
+- **ZeroBus** — event/message bus for streaming data from the app to Unity Catalog
 - **Spark Declarative Pipelines** (formerly Delta Live Tables / DLT) — ETL pipeline definitions
+- **Unity Catalog** — data governance and storage; bronze table uses `VARIANT` type for raw JSON
 - **Lakebase** — Databricks managed database (PostgreSQL-compatible)
 - **AI/BI** — Databricks AI and BI dashboards/analytics
+- **Apple HealthKit** — initial data source (wearable activity measures via JSON)
 - **Language:** Python (primary), SQL (pipeline definitions and queries)
 - **Platform:** Databricks on cloud (Azure, AWS, or GCP)
 
@@ -154,11 +204,14 @@ This project follows the **medallion architecture**:
 | Silver   | Cleaned, validated, deduplicated     | `silver_<entity>`|
 | Gold     | Business-level aggregations          | `gold_<metric>`  |
 
-### Expected Data Sources
+### Bronze Table Design
 
-- Wearable device APIs (Fitbit, Apple Health, Garmin, etc.)
-- Health app exports (CSV, JSON, XML)
-- Real-time streams via ZeroBus
+The bronze layer uses a **key-value style** schema. The raw HealthKit JSON POST body is stored as a `VARIANT` column, preserving the full payload without imposing structure at ingestion time. Metadata columns (record GUID, timestamp, request headers) provide context for lineage and debugging. Exact column definitions are TBD.
+
+### Data Sources
+
+- **Apple HealthKit** (initial) — standard activity measures from Apple Watch and Health app, delivered as JSON via REST API
+- Future: other wearable APIs (Fitbit, Garmin, etc.) and health app exports (CSV, JSON, XML)
 
 ## Important Notes for AI Assistants
 
