@@ -7,6 +7,7 @@ final class SyncStateRepository {
 
     private let defaults: UserDefaults
     private let anchorKeyPrefix = "sync_anchor_"
+    private let lastSyncDateKey = "last_sync_date_"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -27,5 +28,17 @@ final class SyncStateRepository {
             requiringSecureCoding: true
         ) else { return }
         defaults.set(data, forKey: anchorKeyPrefix + sampleType.identifier)
+    }
+
+    // MARK: - Date-based sync tracking (for activity summaries)
+
+    /// Retrieve the last successful sync date for a given key (e.g., "activity_summaries").
+    func lastSyncDate(for key: String) -> Date? {
+        defaults.object(forKey: lastSyncDateKey + key) as? Date
+    }
+
+    /// Persist the last successful sync date for a given key.
+    func saveLastSyncDate(_ date: Date, for key: String) {
+        defaults.set(date, forKey: lastSyncDateKey + key)
     }
 }

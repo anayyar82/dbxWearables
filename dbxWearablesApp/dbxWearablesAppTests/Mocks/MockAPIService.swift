@@ -8,10 +8,11 @@ final class MockAPIService {
         APIResponse(status: "ok", message: "Ingested", recordId: "mock-record-id")
     )
 
-    var postedPayloads: [HealthPayload] = []
+    /// Records each call as (recordType, recordCount) for assertions.
+    var postedCalls: [(recordType: String, count: Int)] = []
 
-    func postHealthPayload(_ payload: HealthPayload) async throws -> APIResponse {
-        postedPayloads.append(payload)
+    func postRecords<T: Encodable>(_ records: [T], recordType: String) async throws -> APIResponse {
+        postedCalls.append((recordType, records.count))
         return try postResult.get()
     }
 }

@@ -14,17 +14,19 @@ final class APIService {
         self.session = session
     }
 
-    /// Post HealthKit quantity samples as NDJSON to the Databricks ingestion endpoint.
+    /// Post an array of Encodable records as NDJSON to the Databricks ingestion endpoint.
     ///
     /// Wire format:
-    /// - Body: NDJSON — one JSON object per line, each representing a single HealthSample
+    /// - Body: NDJSON — one JSON object per line, each a self-contained record
     /// - Headers carry device/upload metadata that the Databricks App attaches to each
     ///   bronze table row alongside the sample VARIANT
     ///
-    /// This keeps the body streamable and lets ZeroBus forward one record per line.
-    func postSamples(_ samples: [HealthSample]) async throws -> APIResponse {
+    /// The `recordType` header tells the Databricks App what kind of records are in
+    /// the body (e.g., "samples", "workouts", "sleep", "activity_summaries") so it can
+    /// route to the appropriate ZeroBus topic or bronze table.
+    func postRecords<T: Encodable>(_ records: [T], recordType: String) async throws -> APIResponse {
         let url = APIConfiguration.baseURL.appendingPathComponent(APIConfiguration.ingestPath)
-        let body = try NDJSONSerializer.encode(samples)
+        let body = try NDJSONSerializer.encode(records)
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -40,6 +42,7 @@ final class APIService {
         request.setValue("apple_healthkit", forHTTPHeaderField: "X-Platform")
         request.setValue(appVersion, forHTTPHeaderField: "X-App-Version")
         request.setValue(DateFormatters.iso8601WithTimezone.string(from: Date()), forHTTPHeaderField: "X-Upload-Timestamp")
+        request.setValue(recordType, forHTTPHeaderField: "X-Record-Type")
 
         if let token = KeychainHelper.retrieveAPIToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

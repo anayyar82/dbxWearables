@@ -1,25 +1,27 @@
-import Foundation
+import UIKit
 
 /// Drives the main dashboard view with sync status and summary data.
 @MainActor
 final class DashboardViewModel: ObservableObject {
 
-    private let healthKitManager = HealthKitManager()
-    private lazy var syncCoordinator = SyncCoordinator(healthStore: healthKitManager.healthStore)
+    private var appDelegate: AppDelegate {
+        UIApplication.shared.delegate as! AppDelegate
+    }
 
     @Published var lastSyncDate: Date?
-    @Published var lastSyncSampleCount = 0
+    @Published var lastSyncRecordCount = 0
     @Published var isSyncing = false
 
     func requestAuthorization() async {
-        try? await healthKitManager.requestAuthorization()
+        try? await appDelegate.healthKitManager.requestAuthorization()
     }
 
     func syncNow() async {
         isSyncing = true
-        await syncCoordinator.sync()
-        lastSyncDate = syncCoordinator.lastSyncDate
-        lastSyncSampleCount = syncCoordinator.lastSyncSampleCount
+        let coordinator = appDelegate.syncCoordinator
+        await coordinator.sync()
+        lastSyncDate = coordinator.lastSyncDate
+        lastSyncRecordCount = coordinator.lastSyncRecordCount
         isSyncing = false
     }
 }

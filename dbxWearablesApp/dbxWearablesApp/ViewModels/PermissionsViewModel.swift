@@ -1,10 +1,12 @@
-import Foundation
+import UIKit
 
 /// Manages the HealthKit authorization flow state for PermissionsView.
 @MainActor
 final class PermissionsViewModel: ObservableObject {
 
-    private let healthKitManager = HealthKitManager()
+    private var healthKitManager: HealthKitManager {
+        (UIApplication.shared.delegate as! AppDelegate).healthKitManager
+    }
 
     @Published var isAuthorized = false
     @Published var errorMessage: String?

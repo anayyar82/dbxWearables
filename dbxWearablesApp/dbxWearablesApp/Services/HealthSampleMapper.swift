@@ -1,8 +1,10 @@
 import Foundation
 import HealthKit
 
-/// Maps raw HKQuantitySample objects into Codable HealthSample models.
+/// Maps raw HKQuantitySample and HKCategorySample objects into Codable HealthSample models.
 enum HealthSampleMapper {
+
+    // MARK: - Quantity samples
 
     /// Convert an HKQuantitySample to a HealthSample ready for JSON serialization.
     static func map(_ sample: HKQuantitySample) -> HealthSample {
@@ -26,6 +28,29 @@ enum HealthSampleMapper {
     /// filtering to only HKQuantitySample instances.
     static func mapQuantitySamples(_ samples: [HKSample]) -> [HealthSample] {
         samples.compactMap { $0 as? HKQuantitySample }.map(map)
+    }
+
+    // MARK: - Category samples (appleStandHour, etc.)
+
+    /// Convert an HKCategorySample to a HealthSample.
+    /// Category values are integer enums — stored as the numeric value with unit "category".
+    static func map(_ sample: HKCategorySample) -> HealthSample {
+        HealthSample(
+            type: sample.categoryType.identifier,
+            value: Double(sample.value),
+            unit: "category",
+            startDate: sample.startDate,
+            endDate: sample.endDate,
+            sourceName: sample.sourceRevision.source.name,
+            sourceBundleId: sample.sourceRevision.source.bundleIdentifier,
+            metadata: stringMetadata(from: sample.metadata)
+        )
+    }
+
+    /// Convert a batch of HKSample results into HealthSample models,
+    /// filtering to only HKCategorySample instances.
+    static func mapCategorySamples(_ samples: [HKSample]) -> [HealthSample] {
+        samples.compactMap { $0 as? HKCategorySample }.map(map)
     }
 
     /// Flatten HealthKit metadata values to string key-value pairs.

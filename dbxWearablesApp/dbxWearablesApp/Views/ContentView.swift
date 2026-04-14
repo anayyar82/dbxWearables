@@ -15,7 +15,7 @@ struct ContentView: View {
                         }
                     } else if let lastSync = viewModel.lastSyncDate {
                         Text("Last sync: \(lastSync, style: .relative) ago")
-                        Text("\(viewModel.lastSyncSampleCount) samples uploaded")
+                        Text("\(viewModel.lastSyncRecordCount) records uploaded")
                             .foregroundStyle(.secondary)
                     } else {
                         Text("Not yet synced")
