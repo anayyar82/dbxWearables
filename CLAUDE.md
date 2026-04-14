@@ -225,7 +225,29 @@ This project follows the **medallion architecture**:
 
 ### Bronze Table Design
 
-The bronze layer uses a **key-value style** schema. The raw HealthKit JSON POST body is stored as a `VARIANT` column, preserving the full payload without imposing structure at ingestion time. Metadata columns (record GUID, timestamp, request headers) provide context for lineage and debugging. Exact column definitions are TBD.
+The bronze layer uses a **key-value style** schema. The raw HealthKit JSON POST body is stored as a `VARIANT` column, preserving the full payload without imposing structure at ingestion time. Metadata columns provide context for lineage and debugging.
+
+**Critical: HTTP request headers must be captured in their own `VARIANT` column** — not discarded or merged into the body. The iOS app sends an `X-Record-Type` header with every POST that identifies the kind of payload:
+
+| `X-Record-Type` value | Payload contents |
+|------------------------|------------------|
+| `samples`              | HealthKit quantity/category samples |
+| `workouts`             | Workout records |
+| `sleep`                | Sleep session records |
+| `activity_summaries`   | Daily activity ring summaries |
+| `deletes`              | Deletion records (uuid + sample_type only) |
+
+This header is the **primary mechanism** for distinguishing delete records from regular records at the bronze layer. Without it, the pipeline would have to inspect each NDJSON line's schema to infer its type — fragile and error-prone. Other headers (`X-Device-Id`, `X-Platform`, `X-App-Version`, `X-Upload-Timestamp`) are also valuable for auditing and deduplication.
+
+Preliminary column sketch (exact definitions TBD):
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `record_id` | `STRING` | Server-generated GUID |
+| `ingested_at` | `TIMESTAMP` | Server-side ingestion timestamp |
+| `body` | `VARIANT` | Raw NDJSON line (one row per line) |
+| `headers` | `VARIANT` | Full HTTP request headers as JSON |
+| `record_type` | `STRING` | Extracted from `X-Record-Type` header for fast filtering |
 
 ### Data Sources
 
