@@ -8,6 +8,7 @@ final class DashboardViewModel: ObservableObject {
     private lazy var syncCoordinator = SyncCoordinator(healthStore: healthKitManager.healthStore)
 
     @Published var lastSyncDate: Date?
+    @Published var lastSyncSampleCount = 0
     @Published var isSyncing = false
 
     func requestAuthorization() async {
@@ -18,6 +19,7 @@ final class DashboardViewModel: ObservableObject {
         isSyncing = true
         await syncCoordinator.sync()
         lastSyncDate = syncCoordinator.lastSyncDate
+        lastSyncSampleCount = syncCoordinator.lastSyncSampleCount
         isSyncing = false
     }
 }
