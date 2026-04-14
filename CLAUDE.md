@@ -10,12 +10,13 @@
 
 ## Current State
 
-This project is in early initialization. The repository currently contains only:
+The project is in early development. What exists so far:
 - `README.md` — project description
 - `LICENSE` — MIT license
 - `CLAUDE.md` — this file
+- `dbxWearablesApp/` — iOS app scaffolding for Apple HealthKit integration (Swift/SwiftUI, MVVM architecture, with models, services, and test stubs)
 
-No source code, build configuration, tests, or CI/CD pipelines exist yet.
+Not yet created: Databricks-side source code (`src/`), pipeline definitions, notebooks, `databricks.yml`, `requirements.txt`, or CI/CD configuration. The Xcode project file (`.xcodeproj`) has not been generated yet — the Swift source files are in place and ready to be added to an Xcode project.
 
 ## Architecture
 
@@ -81,23 +82,41 @@ The initial implementation targets **Apple HealthKit** as the first data source.
 
 ```
 dbxWearables/
-├── CLAUDE.md          # This file — guidance for AI assistants
-├── README.md          # Project description
-└── LICENSE            # MIT license
+├── CLAUDE.md                              # This file — guidance for AI assistants
+├── README.md                              # Project description
+├── LICENSE                                # MIT license
+│
+├── dbxWearablesApp/                       # iOS app — Apple HealthKit integration
+│   ├── .gitignore                         # Xcode/Swift-specific ignores
+│   ├── dbxWearablesApp/                   # Main app source
+│   │   ├── App/                           # App entry point, AppDelegate, Info.plist
+│   │   ├── Configuration/                 # API endpoint and HealthKit type configs
+│   │   ├── Models/                        # Codable structs (HealthSample, WorkoutRecord, etc.)
+│   │   ├── Services/                      # HealthKitManager, QueryService, APIService, SyncCoordinator
+│   │   ├── Repositories/                  # Sync state persistence, pending upload queue
+│   │   ├── Views/                         # SwiftUI views (dashboard, permissions, settings)
+│   │   ├── ViewModels/                    # MVVM view models
+│   │   ├── Utilities/                     # Date formatters, HK extensions, Keychain, Logger
+│   │   ├── Resources/                     # Asset catalog, localization
+│   │   └── Entitlements/                  # HealthKit entitlements plist
+│   ├── dbxWearablesAppTests/              # Unit tests (models, services, mocks)
+│   └── dbxWearablesAppUITests/            # UI tests
+│
+└── (future directories below)
 ```
 
-### Planned directory conventions (follow these as the project grows)
+### Planned directories (Databricks side — create as the project grows)
 
 ```
 dbxWearables/
-├── src/                    # Source code
+├── src/                    # Python source code (Databricks side)
 │   ├── pipelines/          # Spark Declarative Pipeline definitions
-│   ├── ingestion/          # Data ingestion modules (ZeroBus consumers, API connectors)
+│   ├── ingestion/          # ZeroBus consumers, AppKit REST API handler
 │   ├── transforms/         # Data transformation logic
 │   ├── models/             # Data models / schema definitions
-│   └── app/                # AppKit application code
+│   └── app/                # Databricks AppKit application code
 ├── notebooks/              # Databricks notebooks (.py or .sql)
-├── tests/                  # Unit and integration tests
+├── tests/                  # Python unit and integration tests
 │   ├── unit/
 │   └── integration/
 ├── config/                 # Environment and pipeline configuration
