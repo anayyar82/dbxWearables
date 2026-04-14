@@ -11,17 +11,26 @@ final class HealthKitQueryService {
     }
 
     /// Fetch new samples since the given anchor using an anchored object query.
-    /// Returns the new samples and an updated anchor to persist for incremental sync.
+    ///
+    /// - Parameters:
+    ///   - sampleType: The HealthKit sample type to query.
+    ///   - anchor: The anchor from the previous query (nil fetches from the beginning).
+    ///   - limit: Maximum number of samples to return. When the result count equals the limit,
+    ///     there may be more data — call again with the returned anchor to get the next batch.
+    ///     Defaults to `HealthKitConfiguration.queryBatchSize`.
+    ///
+    /// - Returns: The new/updated samples, deleted objects, and an anchor for the next query.
     func fetchNewSamples(
         for sampleType: HKSampleType,
-        anchor: HKQueryAnchor?
+        anchor: HKQueryAnchor?,
+        limit: Int = HealthKitConfiguration.queryBatchSize
     ) async throws -> (samples: [HKSample], deletedObjects: [HKDeletedObject], newAnchor: HKQueryAnchor?) {
         try await withCheckedThrowingContinuation { continuation in
             let query = HKAnchoredObjectQuery(
                 type: sampleType,
                 predicate: nil,
                 anchor: anchor,
-                limit: HKObjectQueryNoLimit
+                limit: limit
             ) { _, added, deleted, newAnchor, error in
                 if let error {
                     continuation.resume(throwing: error)

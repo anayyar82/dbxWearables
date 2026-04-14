@@ -45,4 +45,10 @@ enum HealthKitConfiguration {
 
     /// Background delivery frequency for observer queries.
     static let backgroundDeliveryFrequency: HKUpdateFrequency = .hourly
+
+    /// Maximum number of samples per anchored query batch.
+    /// Each batch becomes one NDJSON POST. At ~250 bytes per sample, 500 records ≈ 125 KB —
+    /// fast to serialize and upload even on cellular, well within the ~30s background window.
+    /// HealthKit returns a new anchor after each batch so progress is incremental.
+    static let queryBatchSize = 500
 }

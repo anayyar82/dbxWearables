@@ -70,54 +70,78 @@ final class SyncCoordinator: ObservableObject {
         }
     }
 
-    // MARK: - Per-type sync
+    // MARK: - Per-type batched sync
 
-    /// Generic sync for any anchored sample type.
-    /// 1. Load persisted anchor (nil on first sync → fetches all history)
-    /// 2. Run anchored query to get new samples
-    /// 3. Map HKSample objects to Encodable models via the provided transform
-    /// 4. POST as NDJSON
-    /// 5. Persist the new anchor on success
+    /// Generic batched sync for any anchored sample type.
     ///
-    /// Returns the number of records uploaded.
+    /// Loops in batches of `HealthKitConfiguration.queryBatchSize`:
+    /// 1. Query up to N samples from the current anchor
+    /// 2. Map HKSample objects to Encodable models via the provided transform
+    /// 3. POST as NDJSON (~125 KB per batch — fast even on cellular)
+    /// 4. Persist the new anchor
+    /// 5. If the batch was full (count == limit), there may be more — loop again
+    ///
+    /// Each batch is an independent commit point. If a POST fails or the background
+    /// window expires mid-loop, all previously completed batches are already persisted.
+    ///
+    /// Returns the total number of records uploaded across all batches.
     private func syncSampleType<T: Encodable>(
         _ sampleType: HKSampleType,
         recordType: String,
         transform: ([HKSample]) -> [T]
     ) async -> Int {
-        let currentAnchor = syncStateRepository.anchor(for: sampleType)
+        var currentAnchor = syncStateRepository.anchor(for: sampleType)
+        var totalUploaded = 0
+        let batchSize = HealthKitConfiguration.queryBatchSize
 
-        let result: (samples: [HKSample], deletedObjects: [HKDeletedObject], newAnchor: HKQueryAnchor?)
-        do {
-            result = try await queryService.fetchNewSamples(for: sampleType, anchor: currentAnchor)
-        } catch {
-            Log.sync.error("Query failed for \(sampleType.identifier): \(error.localizedDescription)")
-            return 0
-        }
-
-        let mapped = transform(result.samples)
-        guard !mapped.isEmpty else {
-            // Still persist the anchor even with no records — the query succeeded
-            // and advancing the anchor avoids re-scanning the same empty range.
-            if let newAnchor = result.newAnchor {
-                syncStateRepository.saveAnchor(newAnchor, for: sampleType)
+        while true {
+            // Query the next batch
+            let result: (samples: [HKSample], deletedObjects: [HKDeletedObject], newAnchor: HKQueryAnchor?)
+            do {
+                result = try await queryService.fetchNewSamples(
+                    for: sampleType,
+                    anchor: currentAnchor,
+                    limit: batchSize
+                )
+            } catch {
+                Log.sync.error("\(sampleType.identifier): query failed — \(error.localizedDescription)")
+                break
             }
-            return 0
-        }
 
-        do {
-            let response = try await apiService.postRecords(mapped, recordType: recordType)
-            Log.sync.info("\(sampleType.identifier): uploaded \(mapped.count) records — \(response.status)")
+            let mapped = transform(result.samples)
 
-            if let newAnchor = result.newAnchor {
-                syncStateRepository.saveAnchor(newAnchor, for: sampleType)
+            if mapped.isEmpty {
+                // No records in this batch — advance anchor and we're done for this type.
+                if let newAnchor = result.newAnchor {
+                    syncStateRepository.saveAnchor(newAnchor, for: sampleType)
+                }
+                break
             }
-            return mapped.count
-        } catch {
-            Log.sync.error("\(sampleType.identifier): upload failed (\(mapped.count) records) — \(error.localizedDescription)")
-            // Anchor NOT persisted — next sync re-fetches these records.
-            return 0
+
+            // POST this batch
+            do {
+                let response = try await apiService.postRecords(mapped, recordType: recordType)
+                Log.sync.info("\(sampleType.identifier): batch uploaded \(mapped.count) records — \(response.status)")
+
+                // Persist anchor immediately — this batch is committed.
+                if let newAnchor = result.newAnchor {
+                    syncStateRepository.saveAnchor(newAnchor, for: sampleType)
+                    currentAnchor = newAnchor
+                }
+                totalUploaded += mapped.count
+            } catch {
+                Log.sync.error("\(sampleType.identifier): batch upload failed (\(mapped.count) records) — \(error.localizedDescription)")
+                // Stop looping — previously completed batches are safe.
+                break
+            }
+
+            // If we got fewer than the limit, there's no more data for this type.
+            if result.samples.count < batchSize {
+                break
+            }
         }
+
+        return totalUploaded
     }
 
     // MARK: - Activity summaries (rings)
