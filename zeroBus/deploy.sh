@@ -1,0 +1,411 @@
+#!/usr/bin/env bash
+# deploy.sh — Shared deployment script for the dbxWearables ZeroBus solution.
+#
+# Deploys Databricks Asset Bundles in dependency order:
+#   1. dbxW_zerobus_infra  (secret scopes, UC schemas, SQL warehouses)
+#   2. UC setup job        (SPN creation, secret provisioning, table DDL)
+#   3. Readiness checks    (all secret scope keys + bronze table exist)
+#   4. dbxW_zerobus        (AppKit app, pipelines, jobs) — when available
+#
+# Usage:
+#   ./deploy.sh --target dev                          # deploy all bundles (with readiness checks)
+#   ./deploy.sh --target dev --run-setup              # deploy infra + run UC setup job + app
+#   ./deploy.sh --target dev --infra                  # deploy only the infra bundle
+#   ./deploy.sh --target dev --infra --run-setup      # deploy infra + run UC setup job
+#   ./deploy.sh --target dev --app                    # deploy only the app bundle (with checks)
+#   ./deploy.sh --target dev --app --skip-checks      # deploy app without readiness checks
+#   ./deploy.sh --target dev --validate               # validate only, no deploy
+#   ./deploy.sh --target dev --destroy                # destroy deployed resources
+#
+# Infrastructure Readiness Checks (gate before app bundle deploy):
+#   Secret scope keys — all 5 must be present:
+#     Auto-provisioned:  client_id, workspace_url, zerobus_endpoint, target_table_name
+#     Admin-provisioned: client_secret
+#   Bronze table — wearables_zerobus must exist in the target catalog.schema
+#
+# Requirements:
+#   - Databricks CLI installed and authenticated (databricks auth login)
+#   - python3 (for JSON parsing of CLI output)
+
+set -euo pipefail
+
+# --------------------------------------------------------------------------- #
+# Constants
+# --------------------------------------------------------------------------- #
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_BUNDLE="dbxW_zerobus_infra"
+APP_BUNDLE="dbxW_zerobus"
+
+# Infrastructure readiness — expected secret scope keys
+REQUIRED_SCOPE_KEYS=(client_id client_secret workspace_url zerobus_endpoint target_table_name)
+AUTO_PROVISIONED_KEYS=(client_id workspace_url zerobus_endpoint target_table_name)
+ADMIN_PROVISIONED_KEYS=(client_secret)
+BRONZE_TABLE="wearables_zerobus"
+UC_SETUP_JOB="wearables_uc_setup"
+
+# Resolved at runtime by resolve_infra_vars()
+SCOPE_NAME=""
+CATALOG=""
+SCHEMA=""
+
+# --------------------------------------------------------------------------- #
+# Defaults
+# --------------------------------------------------------------------------- #
+TARGET=""
+DEPLOY_INFRA=true
+DEPLOY_APP=true
+VALIDATE_ONLY=false
+DESTROY=false
+RUN_SETUP=false
+SKIP_CHECKS=false
+
+# --------------------------------------------------------------------------- #
+# Usage
+# --------------------------------------------------------------------------- #
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") --target <target> [OPTIONS]
+
+Options:
+  --target <name>    Required. Bundle target (dev, hls_fde, prod).
+  --infra            Deploy only the infrastructure bundle.
+  --app              Deploy only the application bundle (skip infra).
+  --run-setup        Run the UC setup job after deploying the infra bundle.
+  --skip-checks      Skip infrastructure readiness checks before app deploy.
+  --validate         Validate bundles without deploying.
+  --destroy          Destroy deployed resources for the target.
+  -h, --help         Show this help message.
+
+Deployment order:
+  1. ${INFRA_BUNDLE}   — shared infrastructure (schema, scope, warehouse)
+  2. UC setup job       — SPN creation, secret provisioning, table DDL
+  3. Readiness checks   — verifies all secret keys + bronze table exist
+  4. ${APP_BUNDLE}      — application (AppKit app, pipelines)
+
+First deployment:
+  ./deploy.sh --target dev --run-setup
+  # Then: admin provisions client_secret (see README)
+  ./deploy.sh --target dev --app
+EOF
+  exit 0
+}
+
+# --------------------------------------------------------------------------- #
+# Parse arguments
+# --------------------------------------------------------------------------- #
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --target)       TARGET="$2"; shift 2 ;;
+    --infra)        DEPLOY_INFRA=true;  DEPLOY_APP=false; shift ;;
+    --app)          DEPLOY_INFRA=false; DEPLOY_APP=true;  shift ;;
+    --run-setup)    RUN_SETUP=true; shift ;;
+    --skip-checks)  SKIP_CHECKS=true; shift ;;
+    --validate)     VALIDATE_ONLY=true; shift ;;
+    --destroy)      DESTROY=true; shift ;;
+    -h|--help)      usage ;;
+    *)              echo "Error: Unknown option '$1'"; usage ;;
+  esac
+done
+
+if [[ -z "${TARGET}" ]]; then
+  echo "Error: --target is required."
+  usage
+fi
+
+# --------------------------------------------------------------------------- #
+# Helpers
+# --------------------------------------------------------------------------- #
+log()  { echo -e "\n\033[1;34m==>\033[0m \033[1m$1\033[0m"; }
+warn() { echo -e "\033[1;33m  ⚠  $1\033[0m"; }
+ok()   { echo -e "\033[1;32m  ✓  $1\033[0m"; }
+fail() { echo -e "\033[1;31m  ✗  $1\033[0m"; exit 1; }
+
+# --------------------------------------------------------------------------- #
+# Prerequisites
+# --------------------------------------------------------------------------- #
+command -v databricks &>/dev/null || fail "Databricks CLI not found. Install: https://docs.databricks.com/dev-tools/cli/install.html"
+command -v python3    &>/dev/null || fail "python3 not found (required for JSON parsing)."
+
+# --------------------------------------------------------------------------- #
+# deploy_bundle — validate and deploy (or destroy) a single bundle
+# --------------------------------------------------------------------------- #
+deploy_bundle() {
+  local bundle_name="$1"
+  local bundle_dir="${SCRIPT_DIR}/${bundle_name}"
+
+  if [[ ! -d "${bundle_dir}" ]]; then
+    warn "Bundle directory '${bundle_name}' does not exist yet — skipping."
+    return 0
+  fi
+
+  if [[ ! -f "${bundle_dir}/databricks.yml" ]]; then
+    warn "No databricks.yml found in '${bundle_name}' — skipping."
+    return 0
+  fi
+
+  log "Validating ${bundle_name} (target: ${TARGET})"
+  (cd "${bundle_dir}" && databricks bundle validate --target "${TARGET}")
+  ok "Validation passed: ${bundle_name}"
+
+  if [[ "${VALIDATE_ONLY}" == true ]]; then
+    return 0
+  fi
+
+  if [[ "${DESTROY}" == true ]]; then
+    log "Destroying ${bundle_name} (target: ${TARGET})"
+    (cd "${bundle_dir}" && databricks bundle destroy --target "${TARGET}" --auto-approve)
+    ok "Destroyed: ${bundle_name}"
+  else
+    log "Deploying ${bundle_name} (target: ${TARGET})"
+    (cd "${bundle_dir}" && databricks bundle deploy --target "${TARGET}")
+    ok "Deployed: ${bundle_name}"
+  fi
+}
+
+# --------------------------------------------------------------------------- #
+# resolve_infra_vars — extract scope name, catalog, and schema from the
+#                      infra bundle's resolved summary
+# --------------------------------------------------------------------------- #
+resolve_infra_vars() {
+  local bundle_dir="${SCRIPT_DIR}/${INFRA_BUNDLE}"
+
+  log "Resolving infrastructure variables (target: ${TARGET})"
+
+  local summary_json
+  summary_json=$(cd "${bundle_dir}" && databricks bundle summary --target "${TARGET}" --output json 2>&1) || {
+    fail "Could not read bundle summary for ${INFRA_BUNDLE}.\n" \
+         "  Deploy the infra bundle first:\n" \
+         "    cd ${bundle_dir} && databricks bundle deploy --target ${TARGET}"
+  }
+
+  # Parse resolved values with python3.
+  # Tries the schema resource first (authoritative), falls back to variables.
+  eval "$(echo "${summary_json}" | python3 -c "
+import sys, json
+
+try:
+    data = json.load(sys.stdin)
+except json.JSONDecodeError as e:
+    print(f'RESOLVE_ERROR=\"JSON parse error: {e}\"', flush=True)
+    sys.exit(0)
+
+vars_block = data.get('variables', {})
+
+# --- secret_scope_name ---
+scope = ''
+sv = vars_block.get('secret_scope_name', {})
+if isinstance(sv, dict):
+    scope = sv.get('value', '')
+else:
+    scope = str(sv)
+
+# --- catalog and schema (prefer the wearables_schema resource) ---
+catalog = ''
+schema  = ''
+resources = data.get('resources', {})
+schemas   = resources.get('schemas', {})
+ws        = schemas.get('wearables_schema', {})
+if isinstance(ws, dict):
+    catalog = ws.get('catalog_name', '')
+    schema  = ws.get('name', '')
+
+# Fallback to variables if resources didn't resolve
+if not catalog:
+    cv = vars_block.get('catalog', {})
+    catalog = cv.get('value', cv) if isinstance(cv, dict) else str(cv)
+if not schema:
+    sv2 = vars_block.get('schema', {})
+    schema = sv2.get('value', sv2) if isinstance(sv2, dict) else str(sv2)
+
+# Sanitise for shell eval safety (strip anything not alphanumeric/underscore/dash/dot)
+import re
+def safe(v):
+    return re.sub(r'[^a-zA-Z0-9_.\-]', '', str(v))
+
+print(f'SCOPE_NAME=\"{safe(scope)}\"')
+print(f'CATALOG=\"{safe(catalog)}\"')
+print(f'SCHEMA=\"{safe(schema)}\"')
+" 2>/dev/null)" || fail "Could not parse bundle summary JSON."
+
+  # Check for parse error forwarded from python
+  if [[ -n "${RESOLVE_ERROR:-}" ]]; then
+    fail "Bundle summary parse error: ${RESOLVE_ERROR}"
+  fi
+
+  [[ -n "${SCOPE_NAME}" ]] || fail "Could not resolve secret_scope_name from bundle summary."
+  [[ -n "${CATALOG}" ]]    || fail "Could not resolve catalog from bundle summary."
+  [[ -n "${SCHEMA}" ]]     || fail "Could not resolve schema from bundle summary."
+
+  ok "Secret scope: ${SCOPE_NAME}"
+  ok "Catalog:      ${CATALOG}"
+  ok "Schema:       ${SCHEMA}"
+}
+
+# --------------------------------------------------------------------------- #
+# run_uc_setup — run the UC setup job via the bundle CLI
+# --------------------------------------------------------------------------- #
+run_uc_setup() {
+  local bundle_dir="${SCRIPT_DIR}/${INFRA_BUNDLE}"
+
+  log "Running UC setup job: ${UC_SETUP_JOB} (target: ${TARGET})"
+  (cd "${bundle_dir}" && databricks bundle run "${UC_SETUP_JOB}" --target "${TARGET}") || \
+    fail "UC setup job failed. Check the Databricks Jobs UI for details."
+  ok "UC setup job completed successfully"
+}
+
+# --------------------------------------------------------------------------- #
+# verify_infra_readiness — gate check before app bundle deployment
+#
+# Checks:
+#   1. Secret scope exists and contains all 5 required keys
+#   2. Bronze table wearables_zerobus exists in catalog.schema
+#
+# Exit behaviour:
+#   - Missing auto-provisioned keys or table → fail with "run UC setup" message
+#   - Missing admin-provisioned key only     → fail with admin instructions
+#   - All present                            → return 0
+# --------------------------------------------------------------------------- #
+verify_infra_readiness() {
+  log "Verifying infrastructure readiness"
+
+  local check_failed=false
+
+  # ---- 1. Secret scope keys -----------------------------------------------
+  local secrets_json
+  secrets_json=$(databricks secrets list-secrets --scope "${SCOPE_NAME}" --output json 2>&1) || {
+    echo ""
+    echo "  Secret scope '${SCOPE_NAME}' not found or not accessible."
+    echo "  The UC setup job must run first to create the SPN and populate secrets:"
+    echo ""
+    echo "    databricks bundle run ${UC_SETUP_JOB} --target ${TARGET}"
+    echo "    # or: ./deploy.sh --target ${TARGET} --run-setup"
+    echo ""
+    fail "Secret scope '${SCOPE_NAME}' does not exist."
+  }
+
+  # Extract the list of key names present in the scope
+  local present_keys
+  present_keys=$(echo "${secrets_json}" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for s in data.get('secrets', []):
+    print(s.get('key', ''))
+" 2>/dev/null) || fail "Could not parse secrets list from scope '${SCOPE_NAME}'."
+
+  local missing_auto=()
+  local missing_admin=()
+
+  for key in "${REQUIRED_SCOPE_KEYS[@]}"; do
+    if echo "${present_keys}" | grep -qx "${key}"; then
+      ok "Secret key present: ${key}"
+    else
+      # Classify as auto-provisioned or admin-provisioned
+      local is_admin=false
+      for admin_key in "${ADMIN_PROVISIONED_KEYS[@]}"; do
+        [[ "${key}" == "${admin_key}" ]] && is_admin=true
+      done
+
+      if [[ "${is_admin}" == true ]]; then
+        missing_admin+=("${key}")
+      else
+        missing_auto+=("${key}")
+      fi
+      warn "Secret key MISSING: ${key}"
+    fi
+  done
+
+  # ---- 2. Bronze table existence ------------------------------------------
+  local full_table="${CATALOG}.${SCHEMA}.${BRONZE_TABLE}"
+  local table_missing=false
+
+  if databricks tables get "${full_table}" &>/dev/null; then
+    ok "Table exists: ${full_table}"
+  else
+    warn "Table MISSING: ${full_table}"
+    table_missing=true
+  fi
+
+  # ---- 3. Evaluate results ------------------------------------------------
+
+  # Auto-provisioned resources missing → UC setup job hasn't been run (or failed)
+  if [[ ${#missing_auto[@]} -gt 0 ]] || [[ "${table_missing}" == true ]]; then
+    echo ""
+    echo "  ============================================================="
+    echo "  Auto-provisioned resources are missing."
+    echo "  The UC setup job must be run before deploying the app bundle."
+    echo "  ============================================================="
+    echo ""
+    [[ ${#missing_auto[@]} -gt 0 ]] && echo "  Missing secret keys: ${missing_auto[*]}"
+    [[ "${table_missing}" == true ]] && echo "  Missing table:       ${full_table}"
+    echo ""
+    echo "  Run the UC setup job:"
+    echo "    databricks bundle run ${UC_SETUP_JOB} --target ${TARGET}"
+    echo "    # or: ./deploy.sh --target ${TARGET} --run-setup"
+    echo ""
+    fail "Infrastructure readiness check failed (auto-provisioned resources missing)."
+  fi
+
+  # Admin-provisioned key missing → admin action required
+  if [[ ${#missing_admin[@]} -gt 0 ]]; then
+    echo ""
+    echo "  ============================================================="
+    echo "  ACTION REQUIRED: An admin must provision the client_secret."
+    echo "  ============================================================="
+    echo ""
+    echo "  All auto-provisioned resources are present, but the OAuth"
+    echo "  client_secret has not been stored in the secret scope yet."
+    echo ""
+    echo "  1. Generate an OAuth secret for the ZeroBus service principal:"
+    echo "     • Workspace UI:  Settings > Identity and access > Service principals"
+    echo "                      > Select the ZeroBus SPN > Secrets > Generate secret"
+    echo "     • Databricks CLI: databricks account service-principal-secrets create <sp_id>"
+    echo ""
+    echo "  2. Store it in the secret scope:"
+    echo "     databricks secrets put-secret \\"
+    echo "       --scope ${SCOPE_NAME} \\"
+    echo "       --key client_secret \\"
+    echo '       --string-value "<secret>"'
+    echo ""
+    echo "  Use --skip-checks to deploy the app bundle without this key."
+    echo ""
+    fail "Infrastructure readiness check failed (admin-provisioned secret missing)."
+  fi
+
+  echo ""
+  ok "All infrastructure readiness checks passed"
+}
+
+# --------------------------------------------------------------------------- #
+# Main
+# --------------------------------------------------------------------------- #
+log "dbxWearables ZeroBus — Bundle Deployment"
+echo "  Target:        ${TARGET}"
+echo "  Infra bundle:  ${DEPLOY_INFRA}"
+echo "  App bundle:    ${DEPLOY_APP}"
+echo "  Run setup:     ${RUN_SETUP}"
+echo "  Skip checks:   ${SKIP_CHECKS}"
+echo "  Validate only: ${VALIDATE_ONLY}"
+echo "  Destroy:       ${DESTROY}"
+
+# Step 1: Deploy infra bundle
+if [[ "${DEPLOY_INFRA}" == true ]]; then
+  deploy_bundle "${INFRA_BUNDLE}"
+fi
+
+# Step 2: Run UC setup job (optional — creates SPN, stores secrets, creates table)
+if [[ "${RUN_SETUP}" == true ]] && [[ "${VALIDATE_ONLY}" != true ]] && [[ "${DESTROY}" != true ]]; then
+  run_uc_setup
+fi
+
+# Step 3: Verify infrastructure readiness (gate before app bundle deploy)
+if [[ "${DEPLOY_APP}" == true ]] && [[ "${SKIP_CHECKS}" != true ]] && [[ "${VALIDATE_ONLY}" != true ]] && [[ "${DESTROY}" != true ]]; then
+  resolve_infra_vars
+  verify_infra_readiness
+fi
+
+# Step 4: Deploy app bundle
+if [[ "${DEPLOY_APP}" == true ]]; then
+  deploy_bundle "${APP_BUNDLE}"
+fi
+
+log "Done."
