@@ -1,0 +1,50 @@
+# Job to create/maintain the ZeroBus bronze target table and UC grants.
+#
+# NOTE: catalog and schema references use ${resources.schemas.wearables_schema.*}
+#       per the bundle convention — never ${var.catalog} or ${var.schema} directly.
+#
+# Runs on the infra SQL warehouse (preview channel, 2X-Small serverless).
+
+resources:
+  jobs:
+    wearables_uc_setup:
+      name: dbxWearables ZeroBus UC Setup — Table DDL & Grants
+
+      description: >
+        Creates and maintains the wearables_zerobus bronze table in Unity Catalog,
+        applies liquid clustering (CLUSTER BY AUTO), and grants USE CATALOG /
+        USE SCHEMA / MODIFY / SELECT to the ZeroBus service principal.
+        Safe to re-run (idempotent).
+
+      parameters:
+        - name: catalog_use
+          default: ${resources.schemas.wearables_schema.catalog_name}
+        - name: schema_use
+          default: ${resources.schemas.wearables_schema.name}
+        - name: spn_application_id
+          default: ${var.zerobus_service_principal}
+
+      tasks:
+        - task_key: create_wearables_table
+          notebook_task:
+            notebook_path: ../src/uc_setup/target-table-ddl.ipynb
+            source: WORKSPACE
+            warehouse_id: ${resources.sql_warehouses.infra_warehouse.id}
+
+      # One run at a time — prevents concurrent DDL/GRANT conflicts
+      max_concurrent_runs: 1
+
+      # Timeout after 10 minutes
+      timeout_seconds: 600
+
+      tags:
+        component: setup
+        resource_type: table
+        table_name: wearables_zerobus
+
+      # No automatic schedule — run manually or via deploy.sh
+      # Uncomment below to schedule daily maintenance:
+      # schedule:
+      #   quartz_cron_expression: "0 0 9 * * ?"
+      #   timezone_id: "America/Los_Angeles"
+      #   pause_status: "PAUSED"
