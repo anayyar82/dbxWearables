@@ -12,6 +12,10 @@
 #
 # This ensures the schema identity is always derived from the actual
 # deployed object, not from a loosely-coupled variable.
+#
+# NOTE: ZeroBus SPN grants (USE_SCHEMA, SELECT, MODIFY) are applied
+# dynamically by the DDL notebook (target-table-ddl), not declared here.
+# Only admin, deploy SP, and user group grants are declared below.
 
 resources:
   schemas:
@@ -21,7 +25,7 @@ resources:
       comment: >
         Wearable and health-app data ingested via Databricks ZeroBus.
         Houses bronze (raw), silver (cleaned), and gold (aggregated) tables
-        for Apple HealthKit and future wearable sources.
+        for Apple HealthKit and other wearable sources.
 
       # Prevent accidental deletion — this schema holds all wearable data
       lifecycle:
@@ -35,6 +39,7 @@ resources:
 
 # ---------------------------------------------------------------------------
 # Target-specific grants
+# (ZeroBus SPN grants are handled by the DDL notebook)
 # ---------------------------------------------------------------------------
 targets:
 
@@ -55,14 +60,6 @@ targets:
       schemas:
         wearables_schema:
           grants:
-            # ZeroBus service principal — read/write tables
-            - principal: ${var.zerobus_service_principal}
-              privileges:
-                - USE_SCHEMA
-                - SELECT
-                - MODIFY
-                - CREATE_TABLE
-                - CREATE_VOLUME
             # Deploy service principal — full control
             - principal: ${var.higher_level_service_principal}
               privileges:

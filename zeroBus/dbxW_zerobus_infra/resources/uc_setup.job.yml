@@ -1,35 +1,54 @@
-# Job to create/maintain the ZeroBus bronze target table and UC grants.
+# Job to bootstrap and maintain the ZeroBus ingestion infrastructure.
+#
+# Two-task workflow:
+#   1. ensure_service_principal — creates (or finds) a least-privilege SPN
+#      dedicated to this schema, provisions OAuth credentials, populates the
+#      secret scope, and outputs the SPN's application_id as a task value.
+#   2. create_wearables_table — DDL + GRANT statements using the SPN from task 1.
 #
 # NOTE: catalog and schema references use ${resources.schemas.wearables_schema.*}
 #       per the bundle convention — never ${var.catalog} or ${var.schema} directly.
-#
-# Runs on the infra SQL warehouse (preview channel, 2X-Small serverless).
 
 resources:
   jobs:
     wearables_uc_setup:
-      name: dbxWearables ZeroBus UC Setup — Table DDL & Grants
+      name: dbxW ZeroBus — UC Setup
 
       description: >
-        Creates and maintains the wearables_zerobus bronze table in Unity Catalog,
-        applies liquid clustering (CLUSTER BY AUTO), and grants USE CATALOG /
-        USE SCHEMA / MODIFY / SELECT to the ZeroBus service principal.
-        Safe to re-run (idempotent).
+        Bootstraps the ZeroBus ingestion infrastructure. Task 1 ensures a
+        least-privilege service principal (dbxw-zerobus-{schema}) exists,
+        generates OAuth credentials, and populates the secret scope with
+        client_id, client_secret, workspace_url, zerobus_endpoint, and
+        target_table_name. Task 2 creates the wearables_zerobus bronze table
+        (liquid clustering via CLUSTER BY AUTO) and grants USE CATALOG /
+        USE SCHEMA / MODIFY / SELECT to the SPN. Idempotent — safe to re-run.
 
+      # Job-level parameters — available to all tasks via dbutils.widgets.get()
       parameters:
         - name: catalog_use
           default: ${resources.schemas.wearables_schema.catalog_name}
         - name: schema_use
           default: ${resources.schemas.wearables_schema.name}
-        - name: spn_application_id
-          default: ${var.zerobus_service_principal}
+        - name: secret_scope_name
+          default: ${var.secret_scope_name}
 
       tasks:
+        # Task 1: Find or create the ZeroBus service principal
+        - task_key: ensure_service_principal
+          notebook_task:
+            notebook_path: ../src/uc_setup/ensure-service-principal.ipynb
+            source: WORKSPACE
+
+        # Task 2: DDL + grants — receives SPN application_id from task 1
         - task_key: create_wearables_table
+          depends_on:
+            - task_key: ensure_service_principal
           notebook_task:
             notebook_path: ../src/uc_setup/target-table-ddl.sql
             source: WORKSPACE
             warehouse_id: ${resources.sql_warehouses.infra_warehouse.id}
+            base_parameters:
+              spn_application_id: "{{tasks.ensure_service_principal.values.spn_application_id}}"
 
       # One run at a time — prevents concurrent DDL/GRANT conflicts
       max_concurrent_runs: 1
