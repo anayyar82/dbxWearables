@@ -3,29 +3,34 @@
 # Notebooks that pull health data from the Garmin Connect API and write
 # raw JSON payloads to the shared wearables_zerobus bronze table.
 #
-# Three jobs:
-#   garmin_setup        — One-time: Garmin OAuth login, schema/table creation,
-#                         initial data pull.  Run interactively (needs email/pw).
-#   garmin_daily_ingest — Scheduled daily: pull yesterday's data via direct
-#                         Delta write (no ZeroBus dependency).
-#   garmin_backfill     — On-demand: backfill a date range via direct Delta write.
+# Five jobs:
+#   garmin_setup           — One-time: Garmin OAuth login, schema/table creation,
+#                            initial data pull (direct Delta write).
+#   garmin_daily_ingest    — Scheduled daily via ZeroBus (primary path).
+#   garmin_backfill        — On-demand backfill via ZeroBus (primary path).
+#   garmin_daily_direct    — Scheduled daily via direct Delta write (fallback).
+#   garmin_backfill_direct — On-demand backfill via direct Delta write (fallback).
 #
 # Prerequisites:
-#   Deploy zeroBus/dbxW_zerobus_infra first (creates schema, table, secret scope),
-#   OR let notebook 00 create them on first run (it's idempotent).
+#   Deploy zeroBus/dbxW_zerobus_infra first (creates schema, table, secret scope,
+#   service principal). The ZeroBus jobs require client_id, client_secret,
+#   workspace_url, zerobus_endpoint, and target_table_name in the secret scope.
 #
 # Deploy:
 #   cd garmin
 #   databricks bundle deploy --target dev
 #
-# Run setup (interactive — set Garmin email/password in the job parameters):
+# Run setup (interactive — provide Garmin email/password):
 #   databricks bundle run garmin_setup --target dev
 #
-# Run daily ingestion manually:
+# Run daily ingestion via ZeroBus:
 #   databricks bundle run garmin_daily_ingest --target dev
 #
-# Run backfill:
-#   databricks bundle run garmin_backfill --target dev
+# Run backfill via ZeroBus:
+#   databricks bundle run garmin_backfill --target dev \
+#     --params start_date=2026-03-01,end_date=2026-04-16
+#
+# Fallback (no ZeroBus): use garmin_daily_direct or garmin_backfill_direct
 
 bundle:
   name: dbxW_garmin_ingest
@@ -36,7 +41,7 @@ variables:
   schema:
     description: Unity Catalog schema within the catalog.
   secret_scope:
-    description: Databricks secret scope holding Garmin OAuth tokens.
+    description: Databricks secret scope for Garmin tokens and ZeroBus credentials.
     default: dbxw_zerobus_credentials
   device_id:
     description: Identifier for the Garmin device (used in bronze row headers).
@@ -67,8 +72,8 @@ resources:
       description: >
         One-time interactive job. Logs in to Garmin Connect (email/password),
         saves OAuth tokens to Databricks Secrets, creates the schema and
-        bronze table if needed, and pulls one day of health data.
-        After this succeeds, daily ingestion uses saved tokens only.
+        bronze table if needed, and pulls one day of health data via direct
+        Delta write. After this succeeds, all other jobs use saved tokens.
 
       parameters:
         - name: catalog
@@ -104,13 +109,110 @@ resources:
       tags:
         component: setup
 
-    # ── Scheduled daily ingestion ────────────────────────────────────────
+    # ═══════════════════════════════════════════════════════════════════
+    # PRIMARY PATH — ZeroBus
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ── Scheduled daily ingestion via ZeroBus ────────────────────────
     garmin_daily_ingest:
-      name: "Garmin — Daily Ingestion"
+      name: "Garmin — Daily Ingestion (ZeroBus)"
       description: >
-        Pulls yesterday's health data from Garmin Connect using saved OAuth
-        tokens and writes directly to the wearables_zerobus bronze table.
-        Scheduled to run daily. No ZeroBus dependency.
+        Pulls yesterday's health data from Garmin Connect and pushes raw
+        JSON payloads to wearables_zerobus via the ZeroBus SDK. Requires
+        ZeroBus service principal credentials in the secret scope.
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: secret_scope
+          default: ${var.secret_scope}
+        - name: target_date
+          default: ""
+        - name: device_id
+          default: ${var.device_id}
+
+      tasks:
+        - task_key: ingest_garmin_zerobus
+          notebook_task:
+            notebook_path: notebooks/01_ingest_garmin.ipynb
+            source: WORKSPACE
+          environment_key: default
+
+      environments:
+        - environment_key: default
+          spec:
+            client: "1"
+
+      schedule:
+        quartz_cron_expression: "0 0 7 * * ?"
+        timezone_id: America/New_York
+        pause_status: PAUSED
+
+      max_concurrent_runs: 1
+      timeout_seconds: 900
+
+      tags:
+        component: ingestion
+        schedule: daily
+        path: zerobus
+
+    # ── On-demand backfill via ZeroBus ───────────────────────────────
+    garmin_backfill:
+      name: "Garmin — Backfill (ZeroBus)"
+      description: >
+        Backfills historical health data from Garmin Connect for a date
+        range via ZeroBus. Requires ZeroBus credentials in the secret scope.
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: secret_scope
+          default: ${var.secret_scope}
+        - name: start_date
+          default: ""
+        - name: end_date
+          default: ""
+        - name: device_id
+          default: ${var.device_id}
+        - name: delay_seconds
+          default: "2"
+
+      tasks:
+        - task_key: backfill_garmin_zerobus
+          notebook_task:
+            notebook_path: notebooks/02_backfill_garmin.ipynb
+            source: WORKSPACE
+          environment_key: default
+
+      environments:
+        - environment_key: default
+          spec:
+            client: "1"
+
+      max_concurrent_runs: 1
+      timeout_seconds: 3600
+
+      tags:
+        component: ingestion
+        schedule: on-demand
+        path: zerobus
+
+    # ═══════════════════════════════════════════════════════════════════
+    # FALLBACK PATH — Direct Delta Write (no ZeroBus dependency)
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ── Scheduled daily ingestion via direct write ───────────────────
+    garmin_daily_direct:
+      name: "Garmin — Daily Ingestion (Direct)"
+      description: >
+        Pulls yesterday's health data from Garmin Connect and writes
+        directly to the wearables_zerobus bronze table using Spark SQL
+        with parse_json(). No ZeroBus dependency — use when ZeroBus
+        credentials are not yet configured.
 
       parameters:
         - name: catalog
@@ -147,14 +249,14 @@ resources:
       tags:
         component: ingestion
         schedule: daily
+        path: direct
 
-    # ── On-demand backfill ───────────────────────────────────────────────
-    garmin_backfill:
-      name: "Garmin — Backfill"
+    # ── On-demand backfill via direct write ──────────────────────────
+    garmin_backfill_direct:
+      name: "Garmin — Backfill (Direct)"
       description: >
         Backfills historical health data from Garmin Connect for a date
-        range. Uses direct Delta write (no ZeroBus). Run on-demand with
-        start_date and end_date parameters.
+        range using direct Delta writes. No ZeroBus dependency.
 
       parameters:
         - name: catalog
@@ -190,6 +292,7 @@ resources:
       tags:
         component: ingestion
         schedule: on-demand
+        path: direct
 
 # ---------------------------------------------------------------------------
 # Targets
