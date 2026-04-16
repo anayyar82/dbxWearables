@@ -1,0 +1,24 @@
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+**/venv/
+**/node_modules/
+**/.vite/
+**/.cache/
+**/.DS_Store
+**/.idea/
+**/.vscode/
+**/.cursor/
+**/.ipynb_checkpoints/
+**/.env
+**/.env.*
+**/.databricks/
+
+# Connect IQ source (not needed on Databricks)
+connect_iq/
+
+# Python pull module (not needed for notebook-based DAB)
+pull/
