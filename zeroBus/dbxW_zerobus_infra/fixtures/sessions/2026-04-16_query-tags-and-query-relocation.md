@@ -2,7 +2,7 @@
 
 ## Session: Query Tags, Predictive Optimization Query Fixes, and Query Relocation
 
-**Date:** 2025-07-17
+**Date:** 2026-04-16
 
 ---
 
