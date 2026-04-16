@@ -1,0 +1,241 @@
+# Databricks Asset Bundle — Garmin Health Data Ingestion
+#
+# Notebooks that pull health data from the Garmin Connect API and write
+# raw JSON payloads to the shared wearables_zerobus bronze table.
+#
+# Three jobs:
+#   garmin_setup        — One-time: Garmin OAuth login, schema/table creation,
+#                         initial data pull.  Run interactively (needs email/pw).
+#   garmin_daily_ingest — Scheduled daily: pull yesterday's data via direct
+#                         Delta write (no ZeroBus dependency).
+#   garmin_backfill     — On-demand: backfill a date range via direct Delta write.
+#
+# Prerequisites:
+#   Deploy zeroBus/dbxW_zerobus_infra first (creates schema, table, secret scope),
+#   OR let notebook 00 create them on first run (it's idempotent).
+#
+# Deploy:
+#   cd garmin
+#   databricks bundle deploy --target dev
+#
+# Run setup (interactive — set Garmin email/password in the job parameters):
+#   databricks bundle run garmin_setup --target dev
+#
+# Run daily ingestion manually:
+#   databricks bundle run garmin_daily_ingest --target dev
+#
+# Run backfill:
+#   databricks bundle run garmin_backfill --target dev
+
+bundle:
+  name: dbxW_garmin_ingest
+
+variables:
+  catalog:
+    description: Unity Catalog catalog for wearable data.
+  schema:
+    description: Unity Catalog schema within the catalog.
+  secret_scope:
+    description: Databricks secret scope holding Garmin OAuth tokens.
+    default: dbxw_zerobus_credentials
+  device_id:
+    description: Identifier for the Garmin device (used in bronze row headers).
+    default: garmin_forerunner_265
+  run_as_user:
+    description: User or service principal that workflows run as.
+
+  # Tags
+  tags_project:
+    default: dbxWearables Garmin
+    description: Project tag for deployed resources.
+  tags_businessUnit:
+    default: Healthcare and Life Sciences
+  tags_developer:
+    default: sailesh.kadam@databricks.com
+  tags_RemoveAfter:
+    default: "2027-04-16"
+
+# ---------------------------------------------------------------------------
+# Jobs
+# ---------------------------------------------------------------------------
+resources:
+  jobs:
+
+    # ── One-time setup: Garmin login + initial load ──────────────────────
+    garmin_setup:
+      name: "Garmin — Setup & Initial Load"
+      description: >
+        One-time interactive job. Logs in to Garmin Connect (email/password),
+        saves OAuth tokens to Databricks Secrets, creates the schema and
+        bronze table if needed, and pulls one day of health data.
+        After this succeeds, daily ingestion uses saved tokens only.
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: secret_scope
+          default: ${var.secret_scope}
+        - name: garmin_email
+          default: ""
+        - name: garmin_password
+          default: ""
+        - name: target_date
+          default: ""
+        - name: device_id
+          default: ${var.device_id}
+
+      tasks:
+        - task_key: garmin_login_and_test
+          notebook_task:
+            notebook_path: notebooks/00_garmin_login_and_test.ipynb
+            source: WORKSPACE
+          environment_key: default
+
+      environments:
+        - environment_key: default
+          spec:
+            client: "1"
+
+      max_concurrent_runs: 1
+      timeout_seconds: 600
+
+      tags:
+        component: setup
+
+    # ── Scheduled daily ingestion ────────────────────────────────────────
+    garmin_daily_ingest:
+      name: "Garmin — Daily Ingestion"
+      description: >
+        Pulls yesterday's health data from Garmin Connect using saved OAuth
+        tokens and writes directly to the wearables_zerobus bronze table.
+        Scheduled to run daily. No ZeroBus dependency.
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: secret_scope
+          default: ${var.secret_scope}
+        - name: target_date
+          default: ""
+        - name: device_id
+          default: ${var.device_id}
+
+      tasks:
+        - task_key: ingest_garmin_direct
+          notebook_task:
+            notebook_path: notebooks/03_ingest_garmin_direct.ipynb
+            source: WORKSPACE
+          environment_key: default
+
+      environments:
+        - environment_key: default
+          spec:
+            client: "1"
+
+      schedule:
+        quartz_cron_expression: "0 0 7 * * ?"
+        timezone_id: America/New_York
+        pause_status: PAUSED
+
+      max_concurrent_runs: 1
+      timeout_seconds: 900
+
+      tags:
+        component: ingestion
+        schedule: daily
+
+    # ── On-demand backfill ───────────────────────────────────────────────
+    garmin_backfill:
+      name: "Garmin — Backfill"
+      description: >
+        Backfills historical health data from Garmin Connect for a date
+        range. Uses direct Delta write (no ZeroBus). Run on-demand with
+        start_date and end_date parameters.
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: secret_scope
+          default: ${var.secret_scope}
+        - name: start_date
+          default: ""
+        - name: end_date
+          default: ""
+        - name: device_id
+          default: ${var.device_id}
+        - name: delay_seconds
+          default: "2"
+
+      tasks:
+        - task_key: backfill_garmin_direct
+          notebook_task:
+            notebook_path: notebooks/04_backfill_garmin_direct.ipynb
+            source: WORKSPACE
+          environment_key: default
+
+      environments:
+        - environment_key: default
+          spec:
+            client: "1"
+
+      max_concurrent_runs: 1
+      timeout_seconds: 3600
+
+      tags:
+        component: ingestion
+        schedule: on-demand
+
+# ---------------------------------------------------------------------------
+# Targets
+# ---------------------------------------------------------------------------
+targets:
+
+  dev:
+    mode: development
+    default: true
+    presets:
+      source_linked_deployment: false
+      tags:
+        project: ${var.tags_project}
+        businessUnit: ${var.tags_businessUnit}
+        developer: ${var.tags_developer}
+        RemoveAfter: ${var.tags_RemoveAfter}
+        env: ${bundle.target}
+    workspace:
+      host: https://adb-984752964297111.11.azuredatabricks.net
+      profile: field-eng-east
+      root_path: /Workspace/Users/${var.run_as_user}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: sailesh
+      schema: wearables
+      run_as_user: sailesh.kadam@databricks.com
+
+  hls_fde:
+    presets:
+      source_linked_deployment: false
+      tags:
+        project: ${var.tags_project}
+        businessUnit: ${var.tags_businessUnit}
+        developer: ${var.tags_developer}
+        RemoveAfter: ${var.tags_RemoveAfter}
+        env: ${bundle.target}
+    workspace:
+      host: https://fevm-hls-fde.cloud.databricks.com
+      root_path: /Workspace/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: hls_fde
+      schema: wearables
+      run_as_user: sailesh.kadam@databricks.com
+    permissions:
+      - user_name: sailesh.kadam@databricks.com
+        level: CAN_MANAGE
+      - user_name: matthew.giglia@databricks.com
+        level: CAN_MANAGE
+      - group_name: users
+        level: CAN_RUN
