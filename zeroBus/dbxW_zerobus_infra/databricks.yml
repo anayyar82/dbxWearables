@@ -11,6 +11,7 @@ bundle:
   name: "dbxW_zerobus_infra"
 
 include:
+  - resources/*.schema.yml
   - resources/*.secret_scope.yml
   - resources/*.job.yml
   - resources/*.yml
@@ -20,11 +21,31 @@ include:
 # Variable declarations
 # Assigned per-target below; referenced in resource YAML files.
 # ---------------------------------------------------------------------------
+#
+# CONVENTION — schema & catalog references:
+#   The `catalog` and `schema` variables below feed ONLY into the schema
+#   resource definition (resources/wearables.schema.yml).
+#
+#   All OTHER resources (jobs, pipelines, apps, volumes, etc.) in this
+#   bundle and in the companion dbxW_zerobus app bundle MUST reference
+#   the schema through deployed-resource substitutions:
+#
+#     ${resources.schemas.wearables_schema.catalog_name}   — catalog
+#     ${resources.schemas.wearables_schema.name}            — schema
+#     ${resources.schemas.wearables_schema.id}              — schema ID (for pipeline targets)
+#
+#   This guarantees references are bound to the actual deployed object,
+#   not to a loosely-coupled variable that could drift.
+# ---------------------------------------------------------------------------
 variables:
   catalog:
-    description: The Unity Catalog catalog to use for all wearable data objects.
+    description: >
+      The Unity Catalog catalog for wearable data objects.
+      USED ONLY by the schema resource — see convention note above.
   schema:
-    description: The Unity Catalog schema within the catalog.
+    description: >
+      The Unity Catalog schema name within the catalog.
+      USED ONLY by the schema resource — see convention note above.
   secret_scope_name:
     description: The Databricks secret scope name for ZeroBus credentials.
     default: dbxw_zerobus_credentials
