@@ -46,33 +46,14 @@ TBLPROPERTIES (
 -- COMMAND ----------
 
 -- DBTITLE 1,Verify Predictive Optimization Status
--- Liquid clustering (CLUSTER BY AUTO) relies on predictive optimization to
--- trigger OPTIMIZE asynchronously after ZeroBus writes.
+-- Liquid clustering (CLUSTER BY AUTO) relies on predictive optimization
+-- to trigger OPTIMIZE asynchronously after ZeroBus writes.
 --
--- Predictive optimization uses an inheritance model:
---   account → catalog → schema (table-level ENABLE is not supported).
---
--- If the catalog already has it enabled, the schema inherits automatically
--- and no action is needed here. This cell checks the current status so you
--- can verify — only run the ALTER SCHEMA in the next cell if the status
--- shows DISABLE or if inheritance is not flowing down.
+-- If the DESCRIBE output below shows predictive optimization is NOT enabled
+-- for this schema, see:
+--   fixtures/examples/queries/enable_predictive_optimization.sql
 
 DESCRIBE SCHEMA EXTENDED IDENTIFIER(catalog_use || '.' || schema_use);
-
--- COMMAND ----------
-
--- DBTITLE 1,Enable Predictive Optimization (run manually if needed)
--- Only run this cell if the DESCRIBE output above shows predictive
--- optimization is NOT enabled (i.e., the catalog does not have it on
--- and the schema shows DISABLE or no inheritance).
---
--- This sets an explicit ENABLE on the schema. If the catalog already
--- provides it via inheritance, skip this cell to preserve the
--- inheritance chain.
-
-%skip
-ALTER SCHEMA IDENTIFIER(catalog_use || '.' || schema_use)
-  ENABLE PREDICTIVE OPTIMIZATION;
 
 -- COMMAND ----------
 
