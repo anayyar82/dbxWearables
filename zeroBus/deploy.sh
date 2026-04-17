@@ -2,9 +2,9 @@
 # deploy.sh — Shared deployment script for the dbxWearables ZeroBus solution.
 #
 # Deploys Databricks Asset Bundles in dependency order:
-#   1. dbxW_zerobus_infra  (secret scopes, UC schemas, SQL warehouses)
+#   1. dbxW_zerobus_infra  (secret scopes, UC schemas, SQL warehouses, Lakebase)
 #   2. UC setup job        (SPN creation, secret provisioning, table DDL)
-#   3. Readiness checks    (all secret scope keys + bronze table exist)
+#   3. Readiness checks    (all secret scope keys + bronze table + Lakebase Data API)
 #   4. dbxW_zerobus        (AppKit app, pipelines, jobs) — when available
 #
 # Usage:
@@ -23,6 +23,7 @@
 #     Admin-provisioned: {client_secret_dbs_key}
 #   Key names are schema-qualified in dev/hls_fde targets (e.g. client_id_wearables).
 #   Bronze table — wearables_zerobus must exist in the target catalog.schema
+#   Lakebase Data API — soft check; warns if Data API not confirmed enabled
 #
 # Requirements:
 #   - Databricks CLI installed and authenticated (databricks auth login)
@@ -54,6 +55,7 @@ CATALOG=""
 SCHEMA=""
 CLIENT_ID_DBS_KEY=""
 CLIENT_SECRET_DBS_KEY=""
+LAKEBASE_PROJECT_ID=""
 
 # --------------------------------------------------------------------------- #
 # Defaults
@@ -84,14 +86,15 @@ Options:
   -h, --help         Show this help message.
 
 Deployment order:
-  1. ${INFRA_BUNDLE}   — shared infrastructure (schema, scope, warehouse)
+  1. ${INFRA_BUNDLE}   — shared infrastructure (schema, scope, warehouse, Lakebase)
   2. UC setup job       — SPN creation, secret provisioning, table DDL
-  3. Readiness checks   — verifies all secret keys + bronze table exist
+  3. Readiness checks   — verifies all secret keys + bronze table + Lakebase Data API
   4. ${APP_BUNDLE}      — application (AppKit app, pipelines)
 
 First deployment:
   ./deploy.sh --target dev --run-setup
   # Then: admin provisions client_secret (see README)
+  # Then: enable Lakebase Data API in the Lakebase App UI
   ./deploy.sh --target dev --app
 EOF
   exit 0
@@ -170,8 +173,8 @@ deploy_bundle() {
 }
 
 # --------------------------------------------------------------------------- #
-# resolve_infra_vars — extract scope name, catalog, schema, and secret key
-#                      names from the infra bundle's resolved summary
+# resolve_infra_vars — extract scope name, catalog, schema, secret key names,
+#                      and Lakebase project ID from the infra bundle summary
 # --------------------------------------------------------------------------- #
 resolve_infra_vars() {
   local bundle_dir="${SCRIPT_DIR}/${INFRA_BUNDLE}"
@@ -211,21 +214,30 @@ scope = get_var('secret_scope_name')
 client_id_key    = get_var('client_id_dbs_key', 'client_id')
 client_secret_key = get_var('client_secret_dbs_key', 'client_secret')
 
-# --- catalog and schema (prefer the wearables_schema resource) ---
+# --- catalog and schema (prefer resource, fall back to variable) ---
 catalog = ''
 schema  = ''
 resources = data.get('resources', {})
-schemas   = resources.get('schemas', {})
-ws        = schemas.get('wearables_schema', {})
-if isinstance(ws, dict):
-    catalog = ws.get('catalog_name', '')
-    schema  = ws.get('name', '')
+schemas_block = resources.get('schemas', {})
+for schema_name, ws in schemas_block.items():
+    if isinstance(ws, dict):
+        catalog = ws.get('catalog_name', '')
+        schema  = ws.get('name', '')
 
 # Fallback to variables if resources didn't resolve
 if not catalog:
     catalog = get_var('catalog')
 if not schema:
     schema = get_var('schema')
+
+# --- lakebase_project_id (from postgres_projects resource) ---
+project_id = ''
+pg_projects = resources.get('postgres_projects', {})
+for proj_name, proj in pg_projects.items():
+    if isinstance(proj, dict):
+        project_id = proj.get('project_id', '')
+        if project_id:
+            break
 
 # Sanitise for shell eval safety (strip anything not alphanumeric/underscore/dash/dot)
 import re
@@ -237,6 +249,7 @@ print(f'CATALOG=\"{safe(catalog)}\"')
 print(f'SCHEMA=\"{safe(schema)}\"')
 print(f'CLIENT_ID_DBS_KEY=\"{safe(client_id_key)}\"')
 print(f'CLIENT_SECRET_DBS_KEY=\"{safe(client_secret_key)}\"')
+print(f'LAKEBASE_PROJECT_ID=\"{safe(project_id)}\"')
 " 2>/dev/null)" || fail "Could not parse bundle summary JSON."
 
   # Check for parse error forwarded from python
@@ -255,6 +268,12 @@ print(f'CLIENT_SECRET_DBS_KEY=\"{safe(client_secret_key)}\"')
   ok "Schema:              ${SCHEMA}"
   ok "Client ID key:       ${CLIENT_ID_DBS_KEY}"
   ok "Client secret key:   ${CLIENT_SECRET_DBS_KEY}"
+
+  if [[ -n "${LAKEBASE_PROJECT_ID}" ]]; then
+    ok "Lakebase project:    ${LAKEBASE_PROJECT_ID}"
+  else
+    warn "No Lakebase project found in bundle resources (may not be deployed yet)."
+  fi
 
   # Build the key arrays now that we have the resolved names
   build_key_arrays
@@ -283,16 +302,114 @@ run_uc_setup() {
 }
 
 # --------------------------------------------------------------------------- #
+# check_lakebase_data_api — soft check for Lakebase Data API enablement
+#
+# The Data API (PostgREST sidecar) must be enabled manually in the Lakebase
+# App UI after the first deploy. There is no DAB resource, REST API, or CLI
+# command to enable it declaratively.
+#
+# This function:
+#   1. Verifies the Lakebase project exists and is accessible
+#   2. Lists endpoints on the main branch to confirm compute is active
+#   3. Attempts to detect Data API enablement from endpoint settings
+#   4. Falls back to a warning with enable instructions if status is unknown
+#
+# This is a SOFT check — it warns but does not fail the deployment.
+# --------------------------------------------------------------------------- #
+check_lakebase_data_api() {
+  local project_id="${LAKEBASE_PROJECT_ID:-}"
+  if [[ -z "${project_id}" ]]; then
+    return 0  # No Lakebase project in this bundle — nothing to check
+  fi
+
+  log "Checking Lakebase Data API (project: ${project_id})"
+
+  # Verify the project is accessible
+  local project_json
+  project_json=$(databricks postgres get-project "${project_id}" --output json 2>&1) || {
+    warn "Lakebase project '${project_id}' not found or not accessible."
+    warn "If the project was just created, it may still be initializing."
+    return 0
+  }
+  ok "Lakebase project exists: ${project_id}"
+
+  # List endpoints on the main branch
+  local endpoints_json
+  endpoints_json=$(databricks postgres list-endpoints "projects/${project_id}/branches/main" --output json 2>&1) || {
+    warn "Could not list endpoints for project '${project_id}' branch 'main'."
+    warn "The branch or endpoint may still be initializing."
+    return 0
+  }
+
+  # Attempt to detect Data API enablement from endpoint settings.
+  # The API response shape is not fully documented — we check several
+  # plausible field locations and fall back to "unknown" gracefully.
+  local data_api_status
+  data_api_status=$(echo "${endpoints_json}" | python3 -c "
+import sys, json
+
+try:
+    data = json.load(sys.stdin)
+except (json.JSONDecodeError, ValueError):
+    print('unknown')
+    sys.exit(0)
+
+endpoints = data.get('endpoints', data.get('items', []))
+if isinstance(data, list):
+    endpoints = data
+
+for ep in endpoints:
+    if not isinstance(ep, dict):
+        continue
+    settings = ep.get('settings', {})
+    # Check known and plausible field locations
+    if settings.get('data_api_enabled'):
+        print('enabled')
+        sys.exit(0)
+    if settings.get('data_api', {}).get('enabled'):
+        print('enabled')
+        sys.exit(0)
+    if ep.get('data_api_enabled'):
+        print('enabled')
+        sys.exit(0)
+    # Check for data_api_url presence as indirect evidence
+    if ep.get('data_api_url') or settings.get('data_api_url'):
+        print('enabled')
+        sys.exit(0)
+
+print('unknown')
+" 2>/dev/null) || data_api_status="unknown"
+
+  if [[ "${data_api_status}" == "enabled" ]]; then
+    ok "Lakebase Data API is enabled"
+  else
+    warn "Lakebase Data API status could not be confirmed."
+    echo ""
+    echo "  The Data API is required for AppKit's Lakebase plugin to connect."
+    echo "  If you haven't enabled it yet, do so in the Lakebase App UI:"
+    echo ""
+    echo "    Lakebase App → project '${project_id}' → Data API → 'Enable Data API'"
+    echo ""
+    echo "  This is a one-time manual step per project. It creates the"
+    echo "  'authenticator' Postgres role and 'pgrst' schema, and exposes"
+    echo "  the 'public' schema via PostgREST-compatible REST endpoints."
+    echo ""
+  fi
+}
+
+# --------------------------------------------------------------------------- #
 # verify_infra_readiness — gate check before app bundle deployment
 #
 # Checks:
 #   1. Secret scope exists and contains all 5 required keys
 #      (key names are schema-qualified, resolved from bundle variables)
 #   2. Bronze table wearables_zerobus exists in catalog.schema
+#   3. Lakebase Data API enabled (soft — warn only, does not block deploy)
 #
 # Exit behaviour:
 #   - Missing auto-provisioned keys or table → fail with "run UC setup" message
 #   - Missing admin-provisioned key only     → fail with admin instructions
+#   - Lakebase Data API not confirmed        → warn (non-blocking)
 #   - All present                            → return 0
 # --------------------------------------------------------------------------- #
 verify_infra_readiness() {
@@ -355,7 +472,10 @@ for s in data.get('secrets', []):
     table_missing=true
   fi
 
-  # ---- 3. Evaluate results ------------------------------------------------
+  # ---- 3. Lakebase Data API (soft check) ----------------------------------
+  check_lakebase_data_api
+
+  # ---- 4. Evaluate results ------------------------------------------------
 
   # Auto-provisioned resources missing → UC setup job hasn't been run (or failed)
   if [[ ${#missing_auto[@]} -gt 0 ]] || [[ "${table_missing}" == true ]]; then

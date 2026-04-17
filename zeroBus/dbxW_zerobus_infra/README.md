@@ -80,11 +80,13 @@ The `wearables.lakebase.yml` resource file defines a **Lakebase Autoscaling** pr
 
 ### Resource hierarchy
 
+The project auto-creates a `main` branch and a read-write endpoint at creation time. Only the project and branch are declared as bundle resources — the endpoint is managed implicitly via `default_endpoint_settings` on the project because each branch allows only one READ_WRITE endpoint.
+
 | Resource | Key | Description |
 | --- | --- | --- |
 | Project | `wearables_lakebase` | Top-level container (`project_id: dbxw-zerobus-wearables`, Postgres 17) |
 | Branch | `wearables_main` | Default protected branch (`main`), no expiry |
-| Endpoint | `wearables_primary` | Read-write autoscaling endpoint |
+| Endpoint | *(auto-created)* | Read-write endpoint; autoscaling controlled by `default_endpoint_settings` |
 
 ### Autoscaling limits per target
 
@@ -95,6 +97,30 @@ The `wearables.lakebase.yml` resource file defines a **Lakebase Autoscaling** pr
 | `prod` | 0.5 | 4 |
 
 The endpoint uses autoscaling with scale-to-zero capability (min 0.5 CU) to minimize idle cost. Both the project and main branch have `lifecycle.prevent_destroy: true` to prevent accidental deletion.
+
+### Post-deploy manual steps
+
+Two Lakebase integrations have no DAB resource type or API and must be configured manually in the UI after the first deploy:
+
+**1. Enable the Data API** *(required for AppKit)*
+
+The Data API is a PostgREST-compatible REST interface that the AppKit Lakebase plugin uses to interact with the database. It must be enabled once per project:
+
+> Lakebase App → project `dbxw-zerobus-wearables` → **Data API** → **Enable Data API**
+
+This creates the `authenticator` Postgres role, the `pgrst` schema, and exposes the `public` schema via REST endpoints. The `deploy.sh` readiness gate includes a soft check for this — it warns if the Data API status cannot be confirmed, but does not block the deploy.
+
+**2. Register in Unity Catalog** *(optional — enables SQL queries)*
+
+Registering the Lakebase database as a UC catalog allows SQL warehouses, notebooks, and dashboards to query Lakebase tables alongside lakehouse data:
+
+> Catalog Explorer → **Create catalog** → type **Lakebase Autoscaling** → select project / `main` branch / `databricks_postgres` database
+
+Once registered, you can query Lakebase tables from any SQL interface:
+
+```sql
+SELECT * FROM lakebase_catalog.public.my_table;
+```
 
 ### AppKit integration
 
@@ -133,16 +159,19 @@ Infrastructure resources must be deployed **first**, before any dependent bundle
 ```
 1. databricks bundle deploy --target dev       ← creates schema, scope, warehouse, Lakebase project
 2. databricks bundle run wearables_uc_setup    ← creates SPN, stores secrets (schema-qualified keys), table, grants
-3. ── Readiness gate ──────────────────────
+3. Manual: enable Lakebase Data API            ← Lakebase App → project → Data API → Enable (one-time)
+4. Manual: provision client_secret             ← generate OAuth secret, store under {client_secret_dbs_key}
+5. Optional: register Lakebase in UC           ← Catalog Explorer → Create catalog → Lakebase Autoscaling
+6. ── Readiness gate ──────────────────────
    │  ✓ Secret scope: {client_id_dbs_key}       (auto-provisioned)
    │  ✓ Secret scope: workspace_url            (auto-provisioned)
    │  ✓ Secret scope: zerobus_endpoint         (auto-provisioned)
    │  ✓ Secret scope: target_table_name        (auto-provisioned)
    │  ✓ Secret scope: {client_secret_dbs_key}   (admin-provisioned)
    │  ✓ Table: catalog.schema.wearables_zerobus
+   │  ⚠ Lakebase Data API enabled              (soft — warns only)
    └───────────────────────────────────────────
-4. Admin: provision client_secret              ← generate OAuth secret, store under {client_secret_dbs_key}
-5. dbxW_zerobus app bundle deploy             ← gated on all checks passing
+7. dbxW_zerobus app bundle deploy             ← gated on all checks passing
 ```
 
 Key names in `{braces}` are resolved from bundle variables at runtime. In dev/hls_fde targets, these resolve to `client_id_wearables` and `client_secret_wearables`.
@@ -154,8 +183,9 @@ Key names in `{braces}` are resolved from bundle variables at runtime. In dev/hl
 | Auto-provisioned keys (`{client_id_dbs_key}`, `workspace_url`, `zerobus_endpoint`, `target_table_name`) | **Fail** — instructs you to run the UC setup job |
 | Bronze table (`wearables_zerobus`) | **Fail** — instructs you to run the UC setup job |
 | Admin-provisioned key (`{client_secret_dbs_key}`) | **Fail** — prints admin provisioning instructions; use `--skip-checks` to override |
+| Lakebase Data API enabled | **Warn** — prints enable instructions; does not block deploy |
 
-The `deploy.sh` script resolves the actual key names from the infra bundle summary (`client_id_dbs_key` and `client_secret_dbs_key` variables) before running the checks.
+The `deploy.sh` script resolves the actual key names from the infra bundle summary (`client_id_dbs_key` and `client_secret_dbs_key` variables) before running the checks. The Lakebase project ID is also resolved from the bundle summary's `postgres_projects` resources.
 
 ### deploy.sh flags
 
@@ -188,7 +218,10 @@ cd zeroBus
 ./deploy.sh --target dev --run-setup
 
 # The script will report that the client secret key is MISSING — expected on first run.
-# Provision it (see "Provision the client_secret" below), then:
+# It will also warn about Lakebase Data API status — enable it now:
+#   Lakebase App → project 'dbxw-zerobus-wearables' → Data API → 'Enable Data API'
+
+# Provision the client secret (see "Provision the client_secret" below), then:
 ./deploy.sh --target dev --app
 ```
 
@@ -240,6 +273,8 @@ databricks secrets put-secret --scope dbxw_zerobus_credentials --key client_secr
 * [Declarative Automation Bundles in the workspace](https://docs.databricks.com/aws/en/dev-tools/bundles/workspace-bundles)
 * [Bundle Configuration Reference](https://docs.databricks.com/aws/en/dev-tools/bundles/reference)
 * [Lakebase Autoscaling](https://docs.databricks.com/aws/en/oltp/projects/)
+* [Lakebase Data API](https://docs.databricks.com/aws/en/oltp/projects/data-api/)
+* [Register Lakebase in Unity Catalog](https://docs.databricks.com/aws/en/oltp/projects/register-uc/)
 * [Manage Lakebase with Bundles](https://docs.databricks.com/aws/en/oltp/projects/manage-with-bundles/)
 * [Predictive Optimization](https://docs.databricks.com/en/optimizations/predictive-optimization/)
 * [Liquid Clustering](https://docs.databricks.com/en/delta/clustering/)
