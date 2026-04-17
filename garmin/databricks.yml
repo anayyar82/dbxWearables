@@ -4,23 +4,31 @@
 # raw JSON payloads to the shared wearables_zerobus bronze table.
 #
 # Five jobs:
-#   garmin_setup           — One-time: Garmin OAuth login, schema/table creation,
-#                            initial data pull (direct Delta write).
+#   garmin_setup           — One-time: schema/table creation + initial data
+#                            pull (direct Delta write). Requires garmin_oauth_tokens
+#                            secret to be populated first via scripts/upload_garmin_tokens.sh.
 #   garmin_daily_ingest    — Scheduled daily via ZeroBus (primary path).
 #   garmin_backfill        — On-demand backfill via ZeroBus (primary path).
 #   garmin_daily_direct    — Scheduled daily via direct Delta write (fallback).
 #   garmin_backfill_direct — On-demand backfill via direct Delta write (fallback).
 #
 # Prerequisites:
-#   Deploy zeroBus/dbxW_zerobus_infra first (creates schema, table, secret scope,
-#   service principal). The ZeroBus jobs require client_id, client_secret,
-#   workspace_url, zerobus_endpoint, and target_table_name in the secret scope.
+#   1. Deploy zeroBus/dbxW_zerobus_infra first (creates schema, table, secret scope,
+#      service principal, and populates the ZeroBus credentials).
+#   2. Run scripts/upload_garmin_tokens.sh to populate garmin_oauth_tokens.
 #
-# Deploy:
+# Deploy (per-developer workspace via a CLI profile):
 #   cd garmin
-#   databricks bundle deploy --target dev
+#   databricks bundle deploy --target dev \
+#     --profile <your-cli-profile> \
+#     --var catalog=<your-catalog> \
+#     --var run_as_user=<your-email>
 #
-# Run setup (interactive — provide Garmin email/password):
+# Alternatively, create a gitignored databricks.local.yml (see
+# databricks.local.yml.example) that includes your workspace overrides, and
+# deploy with just: databricks bundle deploy --target local.
+#
+# Run setup (creates schema/table, pulls one day of data):
 #   databricks bundle run garmin_setup --target dev
 #
 # Run daily ingestion via ZeroBus:
@@ -29,19 +37,23 @@
 # Run backfill via ZeroBus:
 #   databricks bundle run garmin_backfill --target dev \
 #     --params start_date=2026-03-01,end_date=2026-04-16
-#
-# Fallback (no ZeroBus): use garmin_daily_direct or garmin_backfill_direct
 
 bundle:
   name: dbxW_garmin_ingest
+
+include:
+  # Developer-specific workspace overrides (gitignored).
+  # See databricks.local.yml.example for the template.
+  - "*.local.yml"
 
 variables:
   catalog:
     description: Unity Catalog catalog for wearable data.
   schema:
     description: Unity Catalog schema within the catalog.
+    default: wearables
   secret_scope:
-    description: Databricks secret scope for Garmin tokens and ZeroBus credentials.
+    description: Databricks secret scope holding Garmin OAuth tokens and ZeroBus credentials.
     default: dbxw_zerobus_credentials
   device_id:
     description: Identifier for the Garmin device (used in bronze row headers).
@@ -55,10 +67,10 @@ variables:
     description: Project tag for deployed resources.
   tags_businessUnit:
     default: Healthcare and Life Sciences
-  tags_developer:
-    default: sailesh.kadam@databricks.com
   tags_RemoveAfter:
-    default: "2027-04-16"
+    description: >
+      RemoveAfter date for demo-environment hygiene (YYYY-MM-DD). Must be within
+      one year of deployment.
 
 # ---------------------------------------------------------------------------
 # Jobs
@@ -66,14 +78,14 @@ variables:
 resources:
   jobs:
 
-    # ── One-time setup: Garmin login + initial load ──────────────────────
+    # ── One-time setup: schema/table + initial load ──────────────────────
     garmin_setup:
       name: "Garmin — Setup & Initial Load"
       description: >
-        One-time interactive job. Logs in to Garmin Connect (email/password),
-        saves OAuth tokens to Databricks Secrets, creates the schema and
-        bronze table if needed, and pulls one day of health data via direct
-        Delta write. After this succeeds, all other jobs use saved tokens.
+        One-time job that creates the schema and bronze table (idempotent),
+        reads the garmin_oauth_tokens secret, and pulls one day of health
+        data via direct Delta write. Populate garmin_oauth_tokens via
+        scripts/upload_garmin_tokens.sh before running.
 
       parameters:
         - name: catalog
@@ -82,10 +94,6 @@ resources:
           default: ${var.schema}
         - name: secret_scope
           default: ${var.secret_scope}
-        - name: garmin_email
-          default: ""
-        - name: garmin_password
-          default: ""
         - name: target_date
           default: ""
         - name: device_id
@@ -296,6 +304,10 @@ resources:
 
 # ---------------------------------------------------------------------------
 # Targets
+#
+# Only a generic `dev` target is defined here. Supply per-deployment values
+# via CLI flags (`--profile`, `--var ...`) or via a gitignored
+# databricks.local.yml (see databricks.local.yml.example).
 # ---------------------------------------------------------------------------
 targets:
 
@@ -307,38 +319,5 @@ targets:
       tags:
         project: ${var.tags_project}
         businessUnit: ${var.tags_businessUnit}
-        developer: ${var.tags_developer}
         RemoveAfter: ${var.tags_RemoveAfter}
         env: ${bundle.target}
-    workspace:
-      host: https://adb-984752964297111.11.azuredatabricks.net
-      profile: field-eng-east
-      root_path: /Workspace/Users/${var.run_as_user}/.bundle/${bundle.name}/${bundle.target}
-    variables:
-      catalog: sailesh
-      schema: wearables
-      run_as_user: sailesh.kadam@databricks.com
-
-  hls_fde:
-    presets:
-      source_linked_deployment: false
-      tags:
-        project: ${var.tags_project}
-        businessUnit: ${var.tags_businessUnit}
-        developer: ${var.tags_developer}
-        RemoveAfter: ${var.tags_RemoveAfter}
-        env: ${bundle.target}
-    workspace:
-      host: https://fevm-hls-fde.cloud.databricks.com
-      root_path: /Workspace/.bundle/${bundle.name}/${bundle.target}
-    variables:
-      catalog: hls_fde
-      schema: wearables
-      run_as_user: sailesh.kadam@databricks.com
-    permissions:
-      - user_name: sailesh.kadam@databricks.com
-        level: CAN_MANAGE
-      - user_name: matthew.giglia@databricks.com
-        level: CAN_MANAGE
-      - group_name: users
-        level: CAN_RUN
