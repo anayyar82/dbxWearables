@@ -311,7 +311,7 @@ run_uc_setup() {
 #
 # This function:
 #   1. Verifies the Lakebase project exists and is accessible
-#   2. Lists endpoints on the main branch to confirm compute is active
+#   2. Lists endpoints on the production branch to confirm compute is active
 #   3. Attempts to detect Data API enablement from endpoint settings
 #   4. Reports status informatively (does not block deployment)
 #
@@ -334,10 +334,10 @@ check_lakebase_status() {
   }
   ok "Lakebase project exists: ${project_id}"
 
-  # List endpoints on the main branch
+  # List endpoints on the production branch
   local endpoints_json
-  endpoints_json=$(databricks postgres list-endpoints "projects/${project_id}/branches/main" --output json 2>&1) || {
-    warn "Could not list endpoints for project '${project_id}' branch 'main'."
+  endpoints_json=$(databricks postgres list-endpoints "projects/${project_id}/branches/production" --output json 2>&1) || {
+    warn "Could not list endpoints for project '${project_id}' branch 'production'."
     warn "The branch or endpoint may still be initializing."
     return 0
   }

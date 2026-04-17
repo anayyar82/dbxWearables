@@ -80,12 +80,12 @@ The `wearables.lakebase.yml` resource file defines a **Lakebase Autoscaling** pr
 
 ### Resource hierarchy
 
-The project auto-creates a `main` branch and a read-write endpoint at creation time. Only the project and branch are declared as bundle resources — the endpoint is managed implicitly via `default_endpoint_settings` on the project because each branch allows only one READ_WRITE endpoint.
+The project auto-creates a `production` branch and a read-write endpoint at creation time. Only the project and branch are declared as bundle resources — the endpoint is managed implicitly via `default_endpoint_settings` on the project because each branch allows only one READ_WRITE endpoint.
 
 | Resource | Key | Description |
 | --- | --- | --- |
 | Project | `wearables_lakebase` | Top-level container (`project_id: dbxw-zerobus-wearables`, Postgres 17) |
-| Branch | `wearables_main` | Default protected branch (`main`), no expiry |
+| Branch | `wearables_production` | Default protected branch (`production`), no expiry |
 | Endpoint | *(auto-created)* | Read-write endpoint; autoscaling controlled by `default_endpoint_settings` |
 
 ### Autoscaling limits per target
@@ -96,7 +96,7 @@ The project auto-creates a `main` branch and a read-write endpoint at creation t
 | `hls_fde` | 0.5 | 4 |
 | `prod` | 0.5 | 4 |
 
-The endpoint uses autoscaling with scale-to-zero capability (min 0.5 CU) to minimize idle cost. Both the project and main branch have `lifecycle.prevent_destroy: true` to prevent accidental deletion.
+The endpoint uses autoscaling with scale-to-zero capability (min 0.5 CU) to minimize idle cost. Both the project and production branch have `lifecycle.prevent_destroy: true` to prevent accidental deletion.
 
 ### Post-deploy manual steps
 
@@ -114,7 +114,7 @@ This creates the `authenticator` Postgres role, the `pgrst` schema, and exposes 
 
 Registering the Lakebase database as a UC catalog allows SQL warehouses, notebooks, and dashboards to query Lakebase tables alongside lakehouse data:
 
-> Catalog Explorer → **Create catalog** → type **Lakebase Autoscaling** → select project / `main` branch / `databricks_postgres` database
+> Catalog Explorer → **Create catalog** → type **Lakebase Autoscaling** → select project / `production` branch / `databricks_postgres` database
 
 Once registered, you can query Lakebase tables from any SQL interface:
 
