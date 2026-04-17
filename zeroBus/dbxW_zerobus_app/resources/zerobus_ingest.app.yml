@@ -1,28 +1,37 @@
-# Databricks App — ZeroBus Ingest REST API
+# Databricks App — ZeroBus Ingest (AppKit)
 #
-# AppKit application that receives HealthKit JSON POSTs from the iOS app
-# and streams them to the Unity Catalog bronze table via the ZeroBus SDK.
+# TypeScript/Node.js application built with @databricks/appkit (Express +
+# React + Vite). Receives HealthKit JSON POSTs from the iOS app and
+# streams them to the Unity Catalog bronze table via the ZeroBus
+# TypeScript SDK (@databricks/zerobus-ingest-sdk).
 #
 # Architecture:
-#   iOS App (HealthKit) → POST → this App (Flask REST API)
-#     → ZeroBus SDK → wearables_zerobus bronze table
+#   iOS App (HealthKit) → POST → this App (AppKit / Express)
+#     → ZeroBus TypeScript SDK → wearables_zerobus bronze table
+#
+# Stack:
+#   Backend:  @databricks/appkit (Express server, plugin architecture)
+#   Frontend: React + Vite (via appkit-ui, optional admin dashboard)
+#   Ingest:   @databricks/zerobus-ingest-sdk (TypeScript, Rust-backed)
+#   Runtime:  command: ['npm', 'run', 'start'] (node dist/server.js)
 #
 # Authentication:
-#   The app's auto-provisioned service principal reads OAuth credentials
-#   (client_id, client_secret) from the infra bundle's secret scope to
-#   authenticate to the ZeroBus Ingest endpoint. The SPN's own identity
+#   The app's auto-provisioned service principal reads ZeroBus SPN
+#   credentials (client_id, client_secret) from the infra bundle's
+#   secret scope. These are injected as environment variables via the
+#   app.yaml valueFrom directive. The app's own identity
 #   (DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET) is injected by the
 #   platform — the secret scope credentials are for ZeroBus specifically.
 #
 # Secret scope keys (schema-qualified in dev/hls_fde):
-#   {client_id_dbs_key}    — ZeroBus SPN application_id
+#   {client_id_dbs_key}     — ZeroBus SPN application_id
 #   {client_secret_dbs_key} — ZeroBus SPN OAuth secret (admin-provisioned)
 #   workspace_url           — Databricks workspace URL
 #   zerobus_endpoint        — ZeroBus Ingest server endpoint
 #   target_table_name       — Fully qualified bronze table name
 #
-# NOTE: Do NOT add PIP_INDEX_URL or --extra-index-url to env vars —
-#       Databricks Apps have their own package mirror.
+# NOTE: Do NOT add npm registry proxies to env vars — Databricks Apps
+#       have their own package mirror. Proxies are for local dev only.
 
 resources:
   apps:
@@ -30,12 +39,13 @@ resources:
       name: dbxw-zerobus-ingest-${var.schema}
 
       description: >
-        REST API endpoint for wearable health data ingestion via ZeroBus.
-        Receives HealthKit JSON POSTs from the iOS app and streams request
+        AppKit (Node.js + React) application for wearable health data
+        ingestion via ZeroBus. Receives HealthKit JSON POSTs from the
+        iOS app through a custom Express route and streams request
         payload + HTTP headers to the Unity Catalog bronze table
-        (wearables_zerobus) via the ZeroBus SDK. Authenticates to ZeroBus
-        using the dedicated SPN credentials stored in the infra bundle's
-        secret scope.
+        (wearables_zerobus) via the @databricks/zerobus-ingest-sdk.
+        Authenticates to ZeroBus using the dedicated SPN credentials
+        stored in the infra bundle's secret scope.
 
       source_code_path: ../src/app
 
@@ -47,6 +57,9 @@ resources:
       #   env:
       #     - name: ENV_VAR_NAME
       #       valueFrom: <resource-name>
+      #
+      # The app.yaml maps these to environment variables that the AppKit
+      # server reads at startup (e.g. ZEROBUS_CLIENT_ID, ZEROBUS_ENDPOINT).
       # -----------------------------------------------------------------------
       resources:
         # OAuth M2M client ID for ZeroBus authentication

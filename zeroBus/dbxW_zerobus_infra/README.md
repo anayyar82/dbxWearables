@@ -1,6 +1,6 @@
 # dbxW_zerobus_infra
 
-Shared infrastructure bundle for the **dbxWearables ZeroBus** solution. This Databricks Asset Bundle provisions foundational resources — secret scopes, Unity Catalog schemas, SQL warehouses, service principals, and bootstrap jobs — that must exist **before** the primary ZeroBus application bundle (or any other zeroBus-dependent bundle) is deployed.
+Shared infrastructure bundle for the **dbxWearables ZeroBus** solution. This Databricks Asset Bundle provisions foundational resources — secret scopes, Unity Catalog schemas, SQL warehouses, Lakebase databases, service principals, and bootstrap jobs — that must exist **before** the primary ZeroBus application bundle (or any other zeroBus-dependent bundle) is deployed.
 
 ## Relationship to dbxWearables
 
@@ -13,7 +13,7 @@ Client App (HealthKit, etc.)
       → Spark Declarative Pipeline (silver → gold)
 ```
 
-This infrastructure bundle sits at the base of that stack. It creates the shared catalog objects, secrets, compute, and service principals that the AppKit application, ZeroBus streaming layer, and downstream pipelines all depend on.
+This infrastructure bundle sits at the base of that stack. It creates the shared catalog objects, secrets, compute, databases, and service principals that the AppKit application, ZeroBus streaming layer, and downstream pipelines all depend on.
 
 ## What This Bundle Manages
 
@@ -22,6 +22,7 @@ This infrastructure bundle sits at the base of that stack. It creates the shared
 | Unity Catalog Schema | `wearables` schema with grants | Namespace isolation for medallion-layer tables |
 | Secret Scope | `dbxw_zerobus_credentials` | ZeroBus endpoint, workspace URL, target table name, OAuth credentials |
 | SQL Warehouse | 2X-Small serverless PRO (preview channel) | Compute for DDL jobs and ad-hoc queries |
+| Lakebase Autoscaling | `dbxw-zerobus-wearables` (Postgres 17) | OLTP database for app state, sync metadata, operational data |
 | Service Principal | `dbxw-zerobus-{schema}` (created dynamically) | Least-privilege SPN for ZeroBus ingestion |
 | Bronze Table | `wearables_zerobus` (liquid clustering) | Target table for ZeroBus streaming writes |
 | Grants | Catalog, schema, and table grants | Access control for the ZeroBus SPN and user groups |
@@ -73,6 +74,44 @@ The actual key names are passed to the UC setup job as parameters (`client_id_db
 > * **Databricks CLI:** `databricks account service-principal-secrets create <sp_id>`
 > * **External keystore:** Sync from Azure Key Vault, AWS Secrets Manager, or HashiCorp Vault
 
+## Lakebase Autoscaling
+
+The `wearables.lakebase.yml` resource file defines a **Lakebase Autoscaling** project (`dbxw-zerobus-wearables`) — a fully managed, PostgreSQL 17-compatible OLTP database for the application layer. It provides low-latency storage for data that doesn't belong in the analytical lakehouse: user sessions, app state, sync metadata, and operational records.
+
+### Resource hierarchy
+
+| Resource | Key | Description |
+| --- | --- | --- |
+| Project | `wearables_lakebase` | Top-level container (`project_id: dbxw-zerobus-wearables`, Postgres 17) |
+| Branch | `wearables_main` | Default protected branch (`main`), no expiry |
+| Endpoint | `wearables_primary` | Read-write autoscaling endpoint |
+
+### Autoscaling limits per target
+
+| Target | Min CU | Max CU |
+| --- | --- | --- |
+| `dev` | 0.5 | 2 |
+| `hls_fde` | 0.5 | 4 |
+| `prod` | 0.5 | 4 |
+
+The endpoint uses autoscaling with scale-to-zero capability (min 0.5 CU) to minimize idle cost. Both the project and main branch have `lifecycle.prevent_destroy: true` to prevent accidental deletion.
+
+### AppKit integration
+
+The app bundle's AppKit application references this database via the **Lakebase plugin**:
+
+```typescript
+import { createApp, server, lakebase } from '@databricks/appkit';
+
+const appkit = await createApp({
+  plugins: [server(), lakebase()],
+});
+```
+
+The plugin connects using the app's auto-provisioned service principal credentials (`DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET` injected by the platform). The app resource YAML in `dbxW_zerobus_app` will declare a `database` resource grant binding the app to this Lakebase instance.
+
+> **Cost note:** Deploying this resource starts the Lakebase instance immediately. Autoscaling with 0.5 CU minimum keeps idle cost low, but the instance is billable once deployed. See [Lakebase pricing](https://docs.databricks.com/aws/en/oltp/projects/pricing/).
+
 ## Predictive Optimization Requirement
 
 The `wearables_zerobus` bronze table uses **liquid clustering** (`CLUSTER BY AUTO`). ZeroBus writes data into the table, but optimal clustering is applied asynchronously by the **predictive optimization** service.
@@ -92,7 +131,7 @@ Infrastructure resources must be deployed **first**, before any dependent bundle
 ### Pipeline stages
 
 ```
-1. databricks bundle deploy --target dev       ← creates schema, scope, warehouse
+1. databricks bundle deploy --target dev       ← creates schema, scope, warehouse, Lakebase project
 2. databricks bundle run wearables_uc_setup    ← creates SPN, stores secrets (schema-qualified keys), table, grants
 3. ── Readiness gate ──────────────────────
    │  ✓ Secret scope: {client_id_dbs_key}       (auto-provisioned)
@@ -200,6 +239,8 @@ databricks secrets put-secret --scope dbxw_zerobus_credentials --key client_secr
 
 * [Declarative Automation Bundles in the workspace](https://docs.databricks.com/aws/en/dev-tools/bundles/workspace-bundles)
 * [Bundle Configuration Reference](https://docs.databricks.com/aws/en/dev-tools/bundles/reference)
+* [Lakebase Autoscaling](https://docs.databricks.com/aws/en/oltp/projects/)
+* [Manage Lakebase with Bundles](https://docs.databricks.com/aws/en/oltp/projects/manage-with-bundles/)
 * [Predictive Optimization](https://docs.databricks.com/en/optimizations/predictive-optimization/)
 * [Liquid Clustering](https://docs.databricks.com/en/delta/clustering/)
 * [ZeroBus Ingest overview](https://docs.databricks.com/aws/en/ingestion/zerobus-overview/)
