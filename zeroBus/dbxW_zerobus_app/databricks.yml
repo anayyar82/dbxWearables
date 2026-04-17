@@ -51,6 +51,9 @@ variables:
   client_id_dbs_key:
     description: The key name for the ZeroBus OAuth2 M2M client ID in the secret scope.
     default: client_id
+  client_secret_dbs_key:
+    description: The key name for the ZeroBus OAuth2 M2M client ID in the secret scope.
+    default: client_secret
   run_as_user:
     description: The user or service principal that workflows should run as.
   higher_level_service_principal:
@@ -108,8 +111,10 @@ targets:
       root_path: /Workspace/Users/${var.run_as_user}/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: hls_fde_dev
-      schema: wearables
+      schema: dev_matthew_giglia_wearables
       run_as_user: matthew.giglia@databricks.com
+      client_id_dbs_key: client_id_${var.schema}
+      client_secret_dbs_key: client_secret_${var.schema}
 
   # ── hls_fde (production — same workspace as dev) ────────────────────────
   hls_fde:
@@ -134,6 +139,8 @@ targets:
       higher_level_service_principal: acf021b4-87c6-44ff-b3d7-45c59d63fe4d
       run_as_user: ${var.higher_level_service_principal}
       serverless_environment_version: "5"
+      client_id_dbs_key: client_id_${var.schema}
+      client_secret_dbs_key: client_secret_${var.schema} 
     permissions:
       - user_name: matthew.giglia@databricks.com
         level: CAN_MANAGE

@@ -19,8 +19,9 @@
 #
 # Infrastructure Readiness Checks (gate before app bundle deploy):
 #   Secret scope keys — all 5 must be present:
-#     Auto-provisioned:  client_id, workspace_url, zerobus_endpoint, target_table_name
-#     Admin-provisioned: client_secret
+#     Auto-provisioned:  {client_id_dbs_key}, workspace_url, zerobus_endpoint, target_table_name
+#     Admin-provisioned: {client_secret_dbs_key}
+#   Key names are schema-qualified in dev/hls_fde targets (e.g. client_id_wearables).
 #   Bronze table — wearables_zerobus must exist in the target catalog.schema
 #
 # Requirements:
@@ -36,10 +37,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_BUNDLE="dbxW_zerobus_infra"
 APP_BUNDLE="dbxW_zerobus"
 
-# Infrastructure readiness — expected secret scope keys
-REQUIRED_SCOPE_KEYS=(client_id client_secret workspace_url zerobus_endpoint target_table_name)
-AUTO_PROVISIONED_KEYS=(client_id workspace_url zerobus_endpoint target_table_name)
-ADMIN_PROVISIONED_KEYS=(client_secret)
+# Infrastructure readiness — expected secret scope keys.
+# The client_id and client_secret key names are schema-qualified and resolved
+# at runtime by resolve_infra_vars() from the bundle summary variables
+# (client_id_dbs_key, client_secret_dbs_key). The arrays below are
+# populated after resolution; see build_key_arrays().
+REQUIRED_SCOPE_KEYS=()
+AUTO_PROVISIONED_KEYS=()
+ADMIN_PROVISIONED_KEYS=()
 BRONZE_TABLE="wearables_zerobus"
 UC_SETUP_JOB="wearables_uc_setup"
 
@@ -47,6 +52,8 @@ UC_SETUP_JOB="wearables_uc_setup"
 SCOPE_NAME=""
 CATALOG=""
 SCHEMA=""
+CLIENT_ID_DBS_KEY=""
+CLIENT_SECRET_DBS_KEY=""
 
 # --------------------------------------------------------------------------- #
 # Defaults
@@ -163,8 +170,8 @@ deploy_bundle() {
 }
 
 # --------------------------------------------------------------------------- #
-# resolve_infra_vars — extract scope name, catalog, and schema from the
-#                      infra bundle's resolved summary
+# resolve_infra_vars — extract scope name, catalog, schema, and secret key
+#                      names from the infra bundle's resolved summary
 # --------------------------------------------------------------------------- #
 resolve_infra_vars() {
   local bundle_dir="${SCRIPT_DIR}/${INFRA_BUNDLE}"
@@ -191,13 +198,18 @@ except json.JSONDecodeError as e:
 
 vars_block = data.get('variables', {})
 
+def get_var(name, default=''):
+    v = vars_block.get(name, {})
+    if isinstance(v, dict):
+        return v.get('value', default)
+    return str(v) if v else default
+
 # --- secret_scope_name ---
-scope = ''
-sv = vars_block.get('secret_scope_name', {})
-if isinstance(sv, dict):
-    scope = sv.get('value', '')
-else:
-    scope = str(sv)
+scope = get_var('secret_scope_name')
+
+# --- client_id_dbs_key and client_secret_dbs_key ---
+client_id_key    = get_var('client_id_dbs_key', 'client_id')
+client_secret_key = get_var('client_secret_dbs_key', 'client_secret')
 
 # --- catalog and schema (prefer the wearables_schema resource) ---
 catalog = ''
@@ -211,11 +223,9 @@ if isinstance(ws, dict):
 
 # Fallback to variables if resources didn't resolve
 if not catalog:
-    cv = vars_block.get('catalog', {})
-    catalog = cv.get('value', cv) if isinstance(cv, dict) else str(cv)
+    catalog = get_var('catalog')
 if not schema:
-    sv2 = vars_block.get('schema', {})
-    schema = sv2.get('value', sv2) if isinstance(sv2, dict) else str(sv2)
+    schema = get_var('schema')
 
 # Sanitise for shell eval safety (strip anything not alphanumeric/underscore/dash/dot)
 import re
@@ -225,6 +235,8 @@ def safe(v):
 print(f'SCOPE_NAME=\"{safe(scope)}\"')
 print(f'CATALOG=\"{safe(catalog)}\"')
 print(f'SCHEMA=\"{safe(schema)}\"')
+print(f'CLIENT_ID_DBS_KEY=\"{safe(client_id_key)}\"')
+print(f'CLIENT_SECRET_DBS_KEY=\"{safe(client_secret_key)}\"')
 " 2>/dev/null)" || fail "Could not parse bundle summary JSON."
 
   # Check for parse error forwarded from python
@@ -232,13 +244,30 @@ print(f'SCHEMA=\"{safe(schema)}\"')
     fail "Bundle summary parse error: ${RESOLVE_ERROR}"
   fi
 
-  [[ -n "${SCOPE_NAME}" ]] || fail "Could not resolve secret_scope_name from bundle summary."
-  [[ -n "${CATALOG}" ]]    || fail "Could not resolve catalog from bundle summary."
-  [[ -n "${SCHEMA}" ]]     || fail "Could not resolve schema from bundle summary."
+  [[ -n "${SCOPE_NAME}" ]]          || fail "Could not resolve secret_scope_name from bundle summary."
+  [[ -n "${CATALOG}" ]]             || fail "Could not resolve catalog from bundle summary."
+  [[ -n "${SCHEMA}" ]]              || fail "Could not resolve schema from bundle summary."
+  [[ -n "${CLIENT_ID_DBS_KEY}" ]]   || fail "Could not resolve client_id_dbs_key from bundle summary."
+  [[ -n "${CLIENT_SECRET_DBS_KEY}" ]] || fail "Could not resolve client_secret_dbs_key from bundle summary."
 
-  ok "Secret scope: ${SCOPE_NAME}"
-  ok "Catalog:      ${CATALOG}"
-  ok "Schema:       ${SCHEMA}"
+  ok "Secret scope:        ${SCOPE_NAME}"
+  ok "Catalog:             ${CATALOG}"
+  ok "Schema:              ${SCHEMA}"
+  ok "Client ID key:       ${CLIENT_ID_DBS_KEY}"
+  ok "Client secret key:   ${CLIENT_SECRET_DBS_KEY}"
+
+  # Build the key arrays now that we have the resolved names
+  build_key_arrays
+}
+
+# --------------------------------------------------------------------------- #
+# build_key_arrays — populate REQUIRED / AUTO / ADMIN key arrays from the
+#                    resolved client_id_dbs_key and client_secret_dbs_key
+# --------------------------------------------------------------------------- #
+build_key_arrays() {
+  AUTO_PROVISIONED_KEYS=("${CLIENT_ID_DBS_KEY}" workspace_url zerobus_endpoint target_table_name)
+  ADMIN_PROVISIONED_KEYS=("${CLIENT_SECRET_DBS_KEY}")
+  REQUIRED_SCOPE_KEYS=("${AUTO_PROVISIONED_KEYS[@]}" "${ADMIN_PROVISIONED_KEYS[@]}")
 }
 
 # --------------------------------------------------------------------------- #
@@ -258,6 +287,7 @@ run_uc_setup() {
 #
 # Checks:
 #   1. Secret scope exists and contains all 5 required keys
+#      (key names are schema-qualified, resolved from bundle variables)
 #   2. Bronze table wearables_zerobus exists in catalog.schema
 #
 # Exit behaviour:
@@ -349,11 +379,12 @@ for s in data.get('secrets', []):
   if [[ ${#missing_admin[@]} -gt 0 ]]; then
     echo ""
     echo "  ============================================================="
-    echo "  ACTION REQUIRED: An admin must provision the client_secret."
+    echo "  ACTION REQUIRED: An admin must provision the client secret."
     echo "  ============================================================="
     echo ""
     echo "  All auto-provisioned resources are present, but the OAuth"
-    echo "  client_secret has not been stored in the secret scope yet."
+    echo "  client secret has not been stored in the secret scope yet."
+    echo "  Expected key name: ${CLIENT_SECRET_DBS_KEY}"
     echo ""
     echo "  1. Generate an OAuth secret for the ZeroBus service principal:"
     echo "     • Workspace UI:  Settings > Identity and access > Service principals"
@@ -363,7 +394,7 @@ for s in data.get('secrets', []):
     echo "  2. Store it in the secret scope:"
     echo "     databricks secrets put-secret \\"
     echo "       --scope ${SCOPE_NAME} \\"
-    echo "       --key client_secret \\"
+    echo "       --key ${CLIENT_SECRET_DBS_KEY} \\"
     echo '       --string-value "<secret>"'
     echo ""
     echo "  Use --skip-checks to deploy the app bundle without this key."

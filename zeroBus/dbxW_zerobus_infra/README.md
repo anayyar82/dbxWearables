@@ -34,31 +34,41 @@ The **dbxW ZeroBus — UC Setup** job (`resources/uc_setup.job.yml`) is a two-ta
 
 | Task | Notebook | What it does |
 | --- | --- | --- |
-| `ensure_service_principal` | `src/uc_setup/ensure-service-principal` (Python) | Creates or finds SPN `dbxw-zerobus-{schema}`, stores `client_id` + derived values in secret scope, grants scope READ, checks for `client_secret` |
+| `ensure_service_principal` | `src/uc_setup/ensure-service-principal` (Python) | Creates or finds SPN `dbxw-zerobus-{schema}`, stores client ID (under schema-qualified key name) + derived values in secret scope, grants scope READ, checks for client secret |
 | `create_wearables_table` | `src/uc_setup/target-table-ddl` (SQL) | Creates the bronze table with liquid clustering, grants USE CATALOG / USE SCHEMA / MODIFY / SELECT to the SPN |
 
 The SPN's `application_id` is passed from task 1 to task 2 via a Databricks **task value**. The job is idempotent — safe to re-run at any time.
 
 ### Secret Scope Contents
 
-The `dbxw_zerobus_credentials` scope contains two categories of secrets:
+The `dbxw_zerobus_credentials` scope contains two categories of secrets. The client ID and client secret key names are **schema-qualified** in dev and hls_fde targets (e.g. `client_id_wearables`) so that multiple schemas can share a single scope without key collisions.
 
 **Auto-provisioned** (by the UC setup job — refreshed on every run):
 
-| Key | Source | Description |
-| --- | --- | --- |
-| `client_id` | SPN `application_id` | OAuth M2M client identifier |
-| `workspace_url` | Derived from config | Databricks workspace URL |
-| `zerobus_endpoint` | Derived from workspace ID + region | ZeroBus Ingest server endpoint |
-| `target_table_name` | From job params | Fully qualified bronze table name |
+| Key | Name Variable | Source | Description |
+| --- | --- | --- | --- |
+| Client ID | `client_id_dbs_key` | SPN `application_id` | OAuth M2M client identifier |
+| Workspace URL | `workspace_url` (fixed) | Derived from config | Databricks workspace URL |
+| ZeroBus endpoint | `zerobus_endpoint` (fixed) | Derived from workspace ID + region | ZeroBus Ingest server endpoint |
+| Target table name | `target_table_name` (fixed) | From job params | Fully qualified bronze table name |
 
 **Admin-provisioned** (manual step required after first deploy):
 
-| Key | Source | Description |
-| --- | --- | --- |
-| `client_secret` | Admin-generated | OAuth M2M client secret |
+| Key | Name Variable | Source | Description |
+| --- | --- | --- | --- |
+| Client secret | `client_secret_dbs_key` | Admin-generated | OAuth M2M client secret |
 
-> **Admin action required:** After the first run of the UC setup job, an admin must generate an OAuth secret for the `dbxw-zerobus-{schema}` service principal and store the `client_secret` in the scope. The `client_id` is stored automatically. This can be done via:
+#### Schema-qualified key names per target
+
+| Target | `client_id_dbs_key` | `client_secret_dbs_key` |
+| --- | --- | --- |
+| `dev` | `client_id_wearables` | `client_secret_wearables` |
+| `hls_fde` | `client_id_wearables` | `client_secret_wearables` |
+| `prod` | `client_id` *(default)* | `client_secret` *(default)* |
+
+The actual key names are passed to the UC setup job as parameters (`client_id_dbs_key`, `client_secret_dbs_key`) and resolved from the bundle variables at deploy time. The companion `dbxW_zerobus_app` bundle declares matching variables with identical per-target values.
+
+> **Admin action required:** After the first run of the UC setup job, an admin must generate an OAuth secret for the `dbxw-zerobus-{schema}` service principal and store it under the schema-qualified key name (shown in the table above) in the scope. The client ID is stored automatically. This can be done via:
 > * **Workspace UI:** Settings → Identity and access → Service principals → Secrets → Generate secret
 > * **Databricks CLI:** `databricks account service-principal-secrets create <sp_id>`
 > * **External keystore:** Sync from Azure Key Vault, AWS Secrets Manager, or HashiCorp Vault
@@ -83,26 +93,30 @@ Infrastructure resources must be deployed **first**, before any dependent bundle
 
 ```
 1. databricks bundle deploy --target dev       ← creates schema, scope, warehouse
-2. databricks bundle run wearables_uc_setup    ← creates SPN, stores client_id + derived secrets, table, grants
-3. ── Readiness gate ──────────────────────────
-   │  ✓ Secret scope: client_id                (auto-provisioned)
+2. databricks bundle run wearables_uc_setup    ← creates SPN, stores secrets (schema-qualified keys), table, grants
+3. ── Readiness gate ──────────────────────
+   │  ✓ Secret scope: {client_id_dbs_key}       (auto-provisioned)
    │  ✓ Secret scope: workspace_url            (auto-provisioned)
    │  ✓ Secret scope: zerobus_endpoint         (auto-provisioned)
    │  ✓ Secret scope: target_table_name        (auto-provisioned)
-   │  ✓ Secret scope: client_secret            (admin-provisioned)
+   │  ✓ Secret scope: {client_secret_dbs_key}   (admin-provisioned)
    │  ✓ Table: catalog.schema.wearables_zerobus
    └───────────────────────────────────────────
-4. Admin: provision client_secret              ← generate OAuth secret, store in scope
+4. Admin: provision client_secret              ← generate OAuth secret, store under {client_secret_dbs_key}
 5. dbxW_zerobus app bundle deploy             ← gated on all checks passing
 ```
+
+Key names in `{braces}` are resolved from bundle variables at runtime. In dev/hls_fde targets, these resolve to `client_id_wearables` and `client_secret_wearables`.
 
 ### What the readiness gate checks
 
 | Check | Missing → behaviour |
 | --- | --- |
-| Auto-provisioned keys (`client_id`, `workspace_url`, `zerobus_endpoint`, `target_table_name`) | **Fail** — instructs you to run the UC setup job |
+| Auto-provisioned keys (`{client_id_dbs_key}`, `workspace_url`, `zerobus_endpoint`, `target_table_name`) | **Fail** — instructs you to run the UC setup job |
 | Bronze table (`wearables_zerobus`) | **Fail** — instructs you to run the UC setup job |
-| Admin-provisioned key (`client_secret`) | **Fail** — prints admin provisioning instructions; use `--skip-checks` to override |
+| Admin-provisioned key (`{client_secret_dbs_key}`) | **Fail** — prints admin provisioning instructions; use `--skip-checks` to override |
+
+The `deploy.sh` script resolves the actual key names from the infra bundle summary (`client_id_dbs_key` and `client_secret_dbs_key` variables) before running the checks.
 
 ### deploy.sh flags
 
@@ -134,7 +148,7 @@ cd zeroBus
 # Deploy infra + run UC setup job in one step
 ./deploy.sh --target dev --run-setup
 
-# The script will report that client_secret is MISSING — expected on first run.
+# The script will report that the client secret key is MISSING — expected on first run.
 # Provision it (see "Provision the client_secret" below), then:
 ./deploy.sh --target dev --app
 ```
@@ -168,8 +182,12 @@ databricks bundle run wearables_uc_setup --target dev
 #    Via UI: Settings > Identity and access > Service principals > dbxw-zerobus-wearables > Secrets > Generate secret
 #    Via CLI: databricks account service-principal-secrets create <sp_workspace_id>
 
-# 2. Store the secret in the scope (client_id is already stored by the job)
-databricks secrets put-secret --scope dbxw_zerobus_credentials --key client_secret --string-value "<secret>"
+# 2. Store the secret in the scope under the schema-qualified key name.
+#    For dev/hls_fde targets, the key is client_secret_wearables:
+databricks secrets put-secret --scope dbxw_zerobus_credentials --key client_secret_wearables --string-value "<secret>"
+
+#    For the prod target (unqualified default):
+#    databricks secrets put-secret --scope dbxw_zerobus_credentials --key client_secret --string-value "<secret>"
 ```
 
 ### Managing Resources
