@@ -1,4 +1,12 @@
-# Declarative Automation Bundle configuration, more info here: https://docs.databricks.com/en/dev-tools/bundles/settings.html
+# Databricks Asset Bundle — dbxW_zerobus_app
+# Application bundle for the dbxWearables ZeroBus solution.
+# Deploy this bundle AFTER the dbxW_zerobus_infra infrastructure bundle.
+#
+# Manages: AppKit REST API, ZeroBus SDK consumer, Spark Declarative
+#          Pipelines (silver/gold), jobs, and dashboards.
+#
+# See https://docs.databricks.com/en/dev-tools/bundles/settings.html
+
 bundle:
   name: "dbxW_zerobus_app"
 
@@ -6,15 +14,135 @@ include:
   - resources/*.yml
   - resources/*/*.yml
 
+# ---------------------------------------------------------------------------
+# Variable declarations
+# Assigned per-target below; referenced in resource YAML files.
+# ---------------------------------------------------------------------------
+#
+# CONVENTION — catalog & schema references:
+#   Cross-bundle resource substitutions are NOT supported in DAB, so the
+#   app bundle maintains its own `catalog` and `schema` variables whose
+#   per-target values MUST match those deployed by the companion
+#   dbxW_zerobus_infra bundle.
+#
+#   Infra bundle deploys (referenced by substitution within that bundle):
+#     - UC schema:      resources.schemas.wearables_schema
+#     - Secret scope:   resources.secret_scopes.zerobus_secret_scope
+#     - SQL warehouse:  resources.sql_warehouses.infra_warehouse
+#
+#   This app bundle references those objects by name/value:
+#     ${var.catalog}.${var.schema}      — fully qualified schema
+#     ${var.secret_scope_name}          — secret scope name
+#
+#   If the infra target values change, update BOTH bundles.
+# ---------------------------------------------------------------------------
+variables:
+  catalog:
+    description: >
+      The Unity Catalog catalog for wearable data objects.
+      Must match the catalog deployed by dbxW_zerobus_infra for this target.
+  schema:
+    description: >
+      The Unity Catalog schema name within the catalog.
+      Must match the schema deployed by dbxW_zerobus_infra for this target.
+  secret_scope_name:
+    description: The Databricks secret scope name for ZeroBus credentials.
+    default: dbxw_zerobus_credentials
+  client_id_dbs_key:
+    description: The key name for the ZeroBus OAuth2 M2M client ID in the secret scope.
+    default: client_id
+  run_as_user:
+    description: The user or service principal that workflows should run as.
+  higher_level_service_principal:
+    description: >
+      The service principal application ID for higher-level (non-dev) deployments.
+      Comment out or override if not using a service principal for deployments above dev.
+    default: acf021b4-87c6-44ff-b3d7-45c59d63fe4d
+  serverless_environment_version:
+    description: The serverless environment version for notebook/job tasks.
+    default: "5"
+  dashboard_embed_credentials:
+    description: >
+      true = dashboard uses owner's credentials; false = viewer's credentials.
+    default: false
+
+  # Tags — applied to all deployed resources via presets
+  tags_project:
+    default: dbxWearables ZeroBus
+    description: Project tag for deployed resources.
+  tags_businessUnit:
+    default: Healthcare and Life Sciences
+    description: Business unit tag for cost and ROI allocation.
+  tags_developer:
+    default: matthew.giglia@databricks.com
+    description: Primary developer contact for Ops.
+  tags_requestedBy:
+    default: Healthcare Providers and Health Plans
+    description: Primary business-unit stakeholder(s).
+  tags_RemoveAfter:
+    default: 2027-03-04
+    description: >
+      Required Databricks demo-environment tag for long-lived demos.
+      Cannot exceed one year after the deployment date.
+
+# ---------------------------------------------------------------------------
+# Targets
+# ---------------------------------------------------------------------------
 targets:
-  # The 'dev' target, for development purposes. This target is the default.
+
+  # ── dev ──────────────────────────────────────────────────────────────────
   dev:
     mode: development
     default: true
+    presets:
+      source_linked_deployment: false
+      tags:
+        project: ${var.tags_project}
+        businessUnit: ${var.tags_businessUnit}
+        requestedBy: ${var.tags_requestedBy}
+        developer: ${var.tags_developer}
+        RemoveAfter: ${var.tags_RemoveAfter}
+        env: ${bundle.target}
     workspace:
       host: https://fevm-hls-fde.cloud.databricks.com
+      root_path: /Workspace/Users/${var.run_as_user}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: hls_fde_dev
+      schema: wearables
+      run_as_user: matthew.giglia@databricks.com
 
-  # The 'prod' target, used for production deployment.
+  # ── hls_fde (production — same workspace as dev) ────────────────────────
+  hls_fde:
+    mode: production
+    presets:
+      source_linked_deployment: false
+      tags:
+        project: ${var.tags_project}
+        businessUnit: ${var.tags_businessUnit}
+        requestedBy: ${var.tags_requestedBy}
+        developer: ${var.tags_developer}
+        RemoveAfter: ${var.tags_RemoveAfter}
+        env: ${bundle.target}
+    workspace:
+      host: https://fevm-hls-fde.cloud.databricks.com
+      root_path: /Workspace/.bundle/${bundle.name}/${bundle.target}
+    # run_as:
+    #   user_name: ${var.run_as_user}
+    variables:
+      catalog: hls_fde
+      schema: wearables
+      higher_level_service_principal: acf021b4-87c6-44ff-b3d7-45c59d63fe4d
+      run_as_user: ${var.higher_level_service_principal}
+      serverless_environment_version: "5"
+    permissions:
+      - user_name: matthew.giglia@databricks.com
+        level: CAN_MANAGE
+      - group_name: users
+        level: CAN_RUN
+      - service_principal_name: ${var.run_as_user}
+        level: CAN_MANAGE
+
+  # ── prod (placeholder — separate workspace TBD) ─────────────────────────
   prod:
     mode: production
     workspace:
