@@ -14,8 +14,11 @@
 # itself is NOT declared as a bundle resource because the project
 # auto-provisions it and only one READ_WRITE endpoint is allowed per branch.
 #
-# The AppKit app bundle references this via the Lakebase plugin:
-#   appkit.plugins.lakebase()
+# Connection model:
+#   AppKit's Lakebase plugin connects via direct Postgres wire protocol
+#   (port 5432) using OAuth token rotation — NOT the Data API. The platform
+#   injects PGHOST, PGPORT, PGDATABASE, PGUSER env vars into the app
+#   automatically when a database resource is configured.
 #
 # NOTE: Deploying this resource starts the Lakebase instance and incurs
 #       cost immediately. The endpoint uses autoscaling with scale-to-zero
@@ -26,11 +29,13 @@
 # These integrations have no DAB resource type or API — they require
 # manual configuration in the Lakebase App UI after the first deploy.
 #
-#   1. Enable the Data API
+#   1. Enable the Data API (optional — for external REST clients)
 #      Lakebase App → project → Data API → "Enable Data API"
 #      Creates the `authenticator` Postgres role, `pgrst` schema, and
 #      exposes the `public` schema via PostgREST-compatible REST endpoints.
-#      Required for AppKit's Lakebase plugin to function.
+#      NOT required for AppKit — the Lakebase plugin uses direct Postgres
+#      wire protocol. Useful if you need HTTP/REST access from browsers,
+#      external services, or tools without a Postgres driver.
 #
 #   2. Register in Unity Catalog (optional)
 #      Catalog Explorer → Create catalog → type "Lakebase Autoscaling"

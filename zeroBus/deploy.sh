@@ -4,7 +4,7 @@
 # Deploys Databricks Asset Bundles in dependency order:
 #   1. dbxW_zerobus_infra  (secret scopes, UC schemas, SQL warehouses, Lakebase)
 #   2. UC setup job        (SPN creation, secret provisioning, table DDL)
-#   3. Readiness checks    (all secret scope keys + bronze table + Lakebase Data API)
+#   3. Readiness checks    (all secret scope keys + bronze table + Lakebase status)
 #   4. dbxW_zerobus        (AppKit app, pipelines, jobs) — when available
 #
 # Usage:
@@ -23,7 +23,7 @@
 #     Admin-provisioned: {client_secret_dbs_key}
 #   Key names are schema-qualified in dev/hls_fde targets (e.g. client_id_wearables).
 #   Bronze table — wearables_zerobus must exist in the target catalog.schema
-#   Lakebase Data API — soft check; warns if Data API not confirmed enabled
+#   Lakebase project — informational; notes Data API status (optional, not required for AppKit)
 #
 # Requirements:
 #   - Databricks CLI installed and authenticated (databricks auth login)
@@ -88,13 +88,12 @@ Options:
 Deployment order:
   1. ${INFRA_BUNDLE}   — shared infrastructure (schema, scope, warehouse, Lakebase)
   2. UC setup job       — SPN creation, secret provisioning, table DDL
-  3. Readiness checks   — verifies all secret keys + bronze table + Lakebase Data API
+  3. Readiness checks   — verifies all secret keys + bronze table + Lakebase project
   4. ${APP_BUNDLE}      — application (AppKit app, pipelines)
 
 First deployment:
   ./deploy.sh --target dev --run-setup
   # Then: admin provisions client_secret (see README)
-  # Then: enable Lakebase Data API in the Lakebase App UI
   ./deploy.sh --target dev --app
 EOF
   exit 0
@@ -302,27 +301,29 @@ run_uc_setup() {
 }
 
 # --------------------------------------------------------------------------- #
-# check_lakebase_data_api — soft check for Lakebase Data API enablement
+# check_lakebase_status — informational check for Lakebase project health
+#                         and Data API status
 #
-# The Data API (PostgREST sidecar) must be enabled manually in the Lakebase
-# App UI after the first deploy. There is no DAB resource, REST API, or CLI
-# command to enable it declaratively.
+# The Data API (PostgREST sidecar) is OPTIONAL — AppKit's Lakebase plugin
+# connects via direct Postgres wire protocol (port 5432), not the Data API.
+# The Data API is useful for external REST clients, browsers, or tools
+# without a Postgres driver.
 #
 # This function:
 #   1. Verifies the Lakebase project exists and is accessible
 #   2. Lists endpoints on the main branch to confirm compute is active
 #   3. Attempts to detect Data API enablement from endpoint settings
-#   4. Falls back to a warning with enable instructions if status is unknown
+#   4. Reports status informatively (does not block deployment)
 #
-# This is a SOFT check — it warns but does not fail the deployment.
+# This is an INFORMATIONAL check — it never fails the deployment.
 # --------------------------------------------------------------------------- #
-check_lakebase_data_api() {
+check_lakebase_status() {
   local project_id="${LAKEBASE_PROJECT_ID:-}"
   if [[ -z "${project_id}" ]]; then
     return 0  # No Lakebase project in this bundle — nothing to check
   fi
 
-  log "Checking Lakebase Data API (project: ${project_id})"
+  log "Checking Lakebase project status (project: ${project_id})"
 
   # Verify the project is accessible
   local project_json
@@ -381,19 +382,13 @@ print('unknown')
 " 2>/dev/null) || data_api_status="unknown"
 
   if [[ "${data_api_status}" == "enabled" ]]; then
-    ok "Lakebase Data API is enabled"
+    ok "Lakebase Data API is enabled (optional — for external REST clients)"
   else
-    warn "Lakebase Data API status could not be confirmed."
-    echo ""
-    echo "  The Data API is required for AppKit's Lakebase plugin to connect."
-    echo "  If you haven't enabled it yet, do so in the Lakebase App UI:"
-    echo ""
+    ok "Lakebase compute endpoint is running"
+    echo "  Note: Data API status could not be confirmed. This is optional —"
+    echo "  AppKit connects via direct Postgres wire protocol, not the Data API."
+    echo "  To enable the Data API for external REST access:"
     echo "    Lakebase App → project '${project_id}' → Data API → 'Enable Data API'"
-    echo ""
-    echo "  This is a one-time manual step per project. It creates the"
-    echo "  'authenticator' Postgres role and 'pgrst' schema, and exposes"
-    echo "  the 'public' schema via PostgREST-compatible REST endpoints."
-    echo ""
   fi
 }
 
@@ -404,12 +399,12 @@ print('unknown')
 #   1. Secret scope exists and contains all 5 required keys
 #      (key names are schema-qualified, resolved from bundle variables)
 #   2. Bronze table wearables_zerobus exists in catalog.schema
-#   3. Lakebase Data API enabled (soft — warn only, does not block deploy)
+#   3. Lakebase project status (informational — does not block deploy)
 #
 # Exit behaviour:
 #   - Missing auto-provisioned keys or table → fail with "run UC setup" message
 #   - Missing admin-provisioned key only     → fail with admin instructions
-#   - Lakebase Data API not confirmed        → warn (non-blocking)
+#   - Lakebase status unknown                → info note (non-blocking)
 #   - All present                            → return 0
 # --------------------------------------------------------------------------- #
 verify_infra_readiness() {
@@ -472,8 +467,8 @@ for s in data.get('secrets', []):
     table_missing=true
   fi
 
-  # ---- 3. Lakebase Data API (soft check) ----------------------------------
-  check_lakebase_data_api
+  # ---- 3. Lakebase project status (informational) -------------------------
+  check_lakebase_status
 
   # ---- 4. Evaluate results ------------------------------------------------
 
