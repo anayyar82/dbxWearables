@@ -1,6 +1,6 @@
 # dbxW_zerobus_infra
 
-Shared infrastructure bundle for the **dbxWearables ZeroBus** solution. This Databricks Asset Bundle provisions foundational resources — secret scopes, Unity Catalog schemas, SQL warehouses, service principals, and bootstrap jobs — that must exist **before** the primary ZeroBus application bundle (or any other zeroBus-dependent bundle) is deployed.
+Shared infrastructure bundle for the **dbxWearables ZeroBus** solution. This Databricks Asset Bundle provisions foundational resources — secret scopes, Unity Catalog schemas, SQL warehouses, Lakebase databases, service principals, and bootstrap jobs — that must exist **before** the primary ZeroBus application bundle (or any other zeroBus-dependent bundle) is deployed.
 
 ## Relationship to dbxWearables
 
@@ -13,7 +13,7 @@ Client App (HealthKit, etc.)
       → Spark Declarative Pipeline (silver → gold)
 ```
 
-This infrastructure bundle sits at the base of that stack. It creates the shared catalog objects, secrets, compute, and service principals that the AppKit application, ZeroBus streaming layer, and downstream pipelines all depend on.
+This infrastructure bundle sits at the base of that stack. It creates the shared catalog objects, secrets, compute, databases, and service principals that the AppKit application, ZeroBus streaming layer, and downstream pipelines all depend on.
 
 ## What This Bundle Manages
 
@@ -22,6 +22,7 @@ This infrastructure bundle sits at the base of that stack. It creates the shared
 | Unity Catalog Schema | `wearables` schema with grants | Namespace isolation for medallion-layer tables |
 | Secret Scope | `dbxw_zerobus_credentials` | ZeroBus endpoint, workspace URL, target table name, OAuth credentials |
 | SQL Warehouse | 2X-Small serverless PRO (preview channel) | Compute for DDL jobs and ad-hoc queries |
+| Lakebase Autoscaling | `dbxw-zerobus-wearables` (Postgres 17) | OLTP database for app state, sync metadata, operational data |
 | Service Principal | `dbxw-zerobus-{schema}` (created dynamically) | Least-privilege SPN for ZeroBus ingestion |
 | Bronze Table | `wearables_zerobus` (liquid clustering) | Target table for ZeroBus streaming writes |
 | Grants | Catalog, schema, and table grants | Access control for the ZeroBus SPN and user groups |
@@ -34,34 +35,108 @@ The **dbxW ZeroBus — UC Setup** job (`resources/uc_setup.job.yml`) is a two-ta
 
 | Task | Notebook | What it does |
 | --- | --- | --- |
-| `ensure_service_principal` | `src/uc_setup/ensure-service-principal` (Python) | Creates or finds SPN `dbxw-zerobus-{schema}`, stores `client_id` + derived values in secret scope, grants scope READ, checks for `client_secret` |
+| `ensure_service_principal` | `src/uc_setup/ensure-service-principal` (Python) | Creates or finds SPN `dbxw-zerobus-{schema}`, stores client ID (under schema-qualified key name) + derived values in secret scope, grants scope READ, checks for client secret |
 | `create_wearables_table` | `src/uc_setup/target-table-ddl` (SQL) | Creates the bronze table with liquid clustering, grants USE CATALOG / USE SCHEMA / MODIFY / SELECT to the SPN |
 
 The SPN's `application_id` is passed from task 1 to task 2 via a Databricks **task value**. The job is idempotent — safe to re-run at any time.
 
 ### Secret Scope Contents
 
-The `dbxw_zerobus_credentials` scope contains two categories of secrets:
+The `dbxw_zerobus_credentials` scope contains two categories of secrets. The client ID and client secret key names are **schema-qualified** in dev and hls_fde targets (e.g. `client_id_wearables`) so that multiple schemas can share a single scope without key collisions.
 
 **Auto-provisioned** (by the UC setup job — refreshed on every run):
 
-| Key | Source | Description |
-| --- | --- | --- |
-| `client_id` | SPN `application_id` | OAuth M2M client identifier |
-| `workspace_url` | Derived from config | Databricks workspace URL |
-| `zerobus_endpoint` | Derived from workspace ID + region | ZeroBus Ingest server endpoint |
-| `target_table_name` | From job params | Fully qualified bronze table name |
+| Key | Name Variable | Source | Description |
+| --- | --- | --- | --- |
+| Client ID | `client_id_dbs_key` | SPN `application_id` | OAuth M2M client identifier |
+| Workspace URL | `workspace_url` (fixed) | Derived from config | Databricks workspace URL |
+| ZeroBus endpoint | `zerobus_endpoint` (fixed) | Derived from workspace ID + region | ZeroBus Ingest server endpoint |
+| Target table name | `target_table_name` (fixed) | From job params | Fully qualified bronze table name |
 
 **Admin-provisioned** (manual step required after first deploy):
 
-| Key | Source | Description |
-| --- | --- | --- |
-| `client_secret` | Admin-generated | OAuth M2M client secret |
+| Key | Name Variable | Source | Description |
+| --- | --- | --- | --- |
+| Client secret | `client_secret_dbs_key` | Admin-generated | OAuth M2M client secret |
 
-> **Admin action required:** After the first run of the UC setup job, an admin must generate an OAuth secret for the `dbxw-zerobus-{schema}` service principal and store the `client_secret` in the scope. The `client_id` is stored automatically. This can be done via:
+#### Schema-qualified key names per target
+
+| Target | `client_id_dbs_key` | `client_secret_dbs_key` |
+| --- | --- | --- |
+| `dev` | `client_id_wearables` | `client_secret_wearables` |
+| `hls_fde` | `client_id_wearables` | `client_secret_wearables` |
+| `prod` | `client_id` *(default)* | `client_secret` *(default)* |
+
+The actual key names are passed to the UC setup job as parameters (`client_id_dbs_key`, `client_secret_dbs_key`) and resolved from the bundle variables at deploy time. The companion `dbxW_zerobus_app` bundle declares matching variables with identical per-target values.
+
+> **Admin action required:** After the first run of the UC setup job, an admin must generate an OAuth secret for the `dbxw-zerobus-{schema}` service principal and store it under the schema-qualified key name (shown in the table above) in the scope. The client ID is stored automatically. This can be done via:
 > * **Workspace UI:** Settings → Identity and access → Service principals → Secrets → Generate secret
 > * **Databricks CLI:** `databricks account service-principal-secrets create <sp_id>`
 > * **External keystore:** Sync from Azure Key Vault, AWS Secrets Manager, or HashiCorp Vault
+
+## Lakebase Autoscaling
+
+The `wearables.lakebase.yml` resource file defines a **Lakebase Autoscaling** project (`dbxw-zerobus-wearables`) — a fully managed, PostgreSQL 17-compatible OLTP database for the application layer. It provides low-latency storage for data that doesn't belong in the analytical lakehouse: user sessions, app state, sync metadata, and operational records.
+
+### Resource hierarchy
+
+The project auto-creates a `production` branch and a read-write endpoint at creation time. Only the project and branch are declared as bundle resources — the endpoint is managed implicitly via `default_endpoint_settings` on the project because each branch allows only one READ_WRITE endpoint.
+
+| Resource | Key | Description |
+| --- | --- | --- |
+| Project | `wearables_lakebase` | Top-level container (`project_id: dbxw-zerobus-wearables`, Postgres 17) |
+| Branch | `wearables_production` | Default protected branch (`production`), no expiry |
+| Endpoint | *(auto-created)* | Read-write endpoint; autoscaling controlled by `default_endpoint_settings` |
+
+### Autoscaling limits per target
+
+| Target | Min CU | Max CU |
+| --- | --- | --- |
+| `dev` | 0.5 | 2 |
+| `hls_fde` | 0.5 | 4 |
+| `prod` | 0.5 | 4 |
+
+The endpoint uses autoscaling with scale-to-zero capability (min 0.5 CU) to minimize idle cost. Both the project and production branch have `lifecycle.prevent_destroy: true` to prevent accidental deletion.
+
+### Post-deploy manual steps
+
+These Lakebase integrations have no DAB resource type or API and must be configured manually in the UI after the first deploy. **Neither is required for AppKit** — the Lakebase plugin connects via direct Postgres wire protocol (port 5432), not the Data API.
+
+**1. Enable the Data API** *(optional — for external REST clients)*
+
+The Data API is a PostgREST-compatible HTTP/REST layer on top of the Postgres compute endpoint. It is **not** used by AppKit's Lakebase plugin (which uses direct wire protocol with OAuth token rotation). Enable it if you need HTTP-based database access from browsers, external services, or tools without a Postgres driver:
+
+> Lakebase App → project `dbxw-zerobus-wearables` → **Data API** → **Enable Data API**
+
+This creates the `authenticator` Postgres role, the `pgrst` schema, and exposes the `public` schema via REST endpoints. The `deploy.sh` readiness gate includes an informational check — it notes the Data API status but does not block the deploy.
+
+**2. Register in Unity Catalog** *(optional — enables SQL queries)*
+
+Registering the Lakebase database as a UC catalog allows SQL warehouses, notebooks, and dashboards to query Lakebase tables alongside lakehouse data:
+
+> Catalog Explorer → **Create catalog** → type **Lakebase Autoscaling** → select project / `production` branch / `databricks_postgres` database
+
+Once registered, you can query Lakebase tables from any SQL interface:
+
+```sql
+SELECT * FROM lakebase_catalog.public.my_table;
+```
+
+### AppKit integration
+
+The app bundle's AppKit application references this database via the **Lakebase plugin**:
+
+```typescript
+import { createApp, server, lakebase } from '@databricks/appkit';
+
+const appkit = await createApp({
+  plugins: [server(), lakebase()],
+});
+```
+
+The plugin connects via **direct Postgres wire protocol** (port 5432) using the app's auto-provisioned service principal credentials. When a `database` resource is configured in the app YAML, the platform injects standard Postgres environment variables (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGSSLMODE`) and handles OAuth token rotation automatically. No Data API or additional configuration is required.
+
+> **Cost note:** Deploying this resource starts the Lakebase instance immediately. Autoscaling with 0.5 CU minimum keeps idle cost low, but the instance is billable once deployed. See [Lakebase pricing](https://docs.databricks.com/aws/en/oltp/projects/pricing/).
 
 ## Predictive Optimization Requirement
 
@@ -82,27 +157,35 @@ Infrastructure resources must be deployed **first**, before any dependent bundle
 ### Pipeline stages
 
 ```
-1. databricks bundle deploy --target dev       ← creates schema, scope, warehouse
-2. databricks bundle run wearables_uc_setup    ← creates SPN, stores client_id + derived secrets, table, grants
-3. ── Readiness gate ──────────────────────────
-   │  ✓ Secret scope: client_id                (auto-provisioned)
+1. databricks bundle deploy --target dev       ← creates schema, scope, warehouse, Lakebase project
+2. databricks bundle run wearables_uc_setup    ← creates SPN, stores secrets (schema-qualified keys), table, grants
+3. Manual: provision client_secret             ← generate OAuth secret, store under {client_secret_dbs_key}
+4. Optional: enable Lakebase Data API          ← Lakebase App → project → Data API → Enable (for REST clients)
+5. Optional: register Lakebase in UC           ← Catalog Explorer → Create catalog → Lakebase Autoscaling
+6. ── Readiness gate ──────────────────────
+   │  ✓ Secret scope: {client_id_dbs_key}       (auto-provisioned)
    │  ✓ Secret scope: workspace_url            (auto-provisioned)
    │  ✓ Secret scope: zerobus_endpoint         (auto-provisioned)
    │  ✓ Secret scope: target_table_name        (auto-provisioned)
-   │  ✓ Secret scope: client_secret            (admin-provisioned)
+   │  ✓ Secret scope: {client_secret_dbs_key}   (admin-provisioned)
    │  ✓ Table: catalog.schema.wearables_zerobus
+   │  ⚠ Lakebase Data API status               (info — warns only)
    └───────────────────────────────────────────
-4. Admin: provision client_secret              ← generate OAuth secret, store in scope
-5. dbxW_zerobus app bundle deploy             ← gated on all checks passing
+7. dbxW_zerobus app bundle deploy             ← gated on hard checks passing
 ```
+
+Key names in `{braces}` are resolved from bundle variables at runtime. In dev/hls_fde targets, these resolve to `client_id_wearables` and `client_secret_wearables`.
 
 ### What the readiness gate checks
 
 | Check | Missing → behaviour |
 | --- | --- |
-| Auto-provisioned keys (`client_id`, `workspace_url`, `zerobus_endpoint`, `target_table_name`) | **Fail** — instructs you to run the UC setup job |
+| Auto-provisioned keys (`{client_id_dbs_key}`, `workspace_url`, `zerobus_endpoint`, `target_table_name`) | **Fail** — instructs you to run the UC setup job |
 | Bronze table (`wearables_zerobus`) | **Fail** — instructs you to run the UC setup job |
-| Admin-provisioned key (`client_secret`) | **Fail** — prints admin provisioning instructions; use `--skip-checks` to override |
+| Admin-provisioned key (`{client_secret_dbs_key}`) | **Fail** — prints admin provisioning instructions; use `--skip-checks` to override |
+| Lakebase Data API status | **Info** — notes status if detectable; does not block deploy (AppKit does not require it) |
+
+The `deploy.sh` script resolves the actual key names from the infra bundle summary (`client_id_dbs_key` and `client_secret_dbs_key` variables) before running the checks. The Lakebase project ID is also resolved from the bundle summary's `postgres_projects` resources.
 
 ### deploy.sh flags
 
@@ -134,9 +217,13 @@ cd zeroBus
 # Deploy infra + run UC setup job in one step
 ./deploy.sh --target dev --run-setup
 
-# The script will report that client_secret is MISSING — expected on first run.
+# The script will report that the client secret key is MISSING — expected on first run.
 # Provision it (see "Provision the client_secret" below), then:
 ./deploy.sh --target dev --app
+
+# Optional post-deploy steps (not required for AppKit):
+#   Enable Data API:  Lakebase App → project → Data API → 'Enable Data API'
+#   Register in UC:   Catalog Explorer → Create catalog → Lakebase Autoscaling
 ```
 
 ### Deploy via shared script
@@ -168,8 +255,12 @@ databricks bundle run wearables_uc_setup --target dev
 #    Via UI: Settings > Identity and access > Service principals > dbxw-zerobus-wearables > Secrets > Generate secret
 #    Via CLI: databricks account service-principal-secrets create <sp_workspace_id>
 
-# 2. Store the secret in the scope (client_id is already stored by the job)
-databricks secrets put-secret --scope dbxw_zerobus_credentials --key client_secret --string-value "<secret>"
+# 2. Store the secret in the scope under the schema-qualified key name.
+#    For dev/hls_fde targets, the key is client_secret_wearables:
+databricks secrets put-secret --scope dbxw_zerobus_credentials --key client_secret_wearables --string-value "<secret>"
+
+#    For the prod target (unqualified default):
+#    databricks secrets put-secret --scope dbxw_zerobus_credentials --key client_secret --string-value "<secret>"
 ```
 
 ### Managing Resources
@@ -182,6 +273,11 @@ databricks secrets put-secret --scope dbxw_zerobus_credentials --key client_secr
 
 * [Declarative Automation Bundles in the workspace](https://docs.databricks.com/aws/en/dev-tools/bundles/workspace-bundles)
 * [Bundle Configuration Reference](https://docs.databricks.com/aws/en/dev-tools/bundles/reference)
+* [Lakebase Autoscaling](https://docs.databricks.com/aws/en/oltp/projects/)
+* [Lakebase Data API](https://docs.databricks.com/aws/en/oltp/projects/data-api/)
+* [Connect Apps to Lakebase](https://docs.databricks.com/aws/en/oltp/projects/tutorial-databricks-apps-autoscaling/)
+* [Register Lakebase in Unity Catalog](https://docs.databricks.com/aws/en/oltp/projects/register-uc/)
+* [Manage Lakebase with Bundles](https://docs.databricks.com/aws/en/oltp/projects/manage-with-bundles/)
 * [Predictive Optimization](https://docs.databricks.com/en/optimizations/predictive-optimization/)
 * [Liquid Clustering](https://docs.databricks.com/en/delta/clustering/)
 * [ZeroBus Ingest overview](https://docs.databricks.com/aws/en/ingestion/zerobus-overview/)

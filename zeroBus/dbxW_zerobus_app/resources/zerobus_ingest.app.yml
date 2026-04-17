@@ -1,0 +1,141 @@
+# Databricks App — ZeroBus Ingest (AppKit)
+#
+# TypeScript/Node.js application built with @databricks/appkit (Express +
+# React + Vite). Receives HealthKit JSON POSTs from the iOS app and
+# streams them to the Unity Catalog bronze table via the ZeroBus
+# TypeScript SDK (@databricks/zerobus-ingest-sdk).
+#
+# Architecture:
+#   iOS App (HealthKit) → POST → this App (AppKit / Express)
+#     → ZeroBus TypeScript SDK → wearables_zerobus bronze table
+#
+# Stack:
+#   Backend:  @databricks/appkit (Express server, plugin architecture)
+#   Frontend: React + Vite (via appkit-ui, optional admin dashboard)
+#   Ingest:   @databricks/zerobus-ingest-sdk (TypeScript, Rust-backed)
+#   Runtime:  command: ['npm', 'run', 'start'] (node dist/server.js)
+#
+# Authentication:
+#   The app's auto-provisioned service principal reads ZeroBus SPN
+#   credentials (client_id, client_secret) from the infra bundle's
+#   secret scope. These are injected as environment variables via the
+#   app.yaml valueFrom directive. The app's own identity
+#   (DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET) is injected by the
+#   platform — the secret scope credentials are for ZeroBus specifically.
+#
+# Secret scope keys (schema-qualified in dev/hls_fde):
+#   {client_id_dbs_key}     — ZeroBus SPN application_id
+#   {client_secret_dbs_key} — ZeroBus SPN OAuth secret (admin-provisioned)
+#   workspace_url           — Databricks workspace URL
+#   zerobus_endpoint        — ZeroBus Ingest server endpoint
+#   target_table_name       — Fully qualified bronze table name
+#
+# NOTE: Do NOT add npm registry proxies to env vars — Databricks Apps
+#       have their own package mirror. Proxies are for local dev only.
+
+resources:
+  apps:
+    zerobus_ingest:
+      name: dbxw-zerobus-ingest-${var.schema}
+
+      description: >
+        AppKit (Node.js + React) application for wearable health data
+        ingestion via ZeroBus. Receives HealthKit JSON POSTs from the
+        iOS app through a custom Express route and streams request
+        payload + HTTP headers to the Unity Catalog bronze table
+        (wearables_zerobus) via the @databricks/zerobus-ingest-sdk.
+        Authenticates to ZeroBus using the dedicated SPN credentials
+        stored in the infra bundle's secret scope.
+
+      source_code_path: ../src/app
+
+      # -----------------------------------------------------------------------
+      # App resources — grant the app's auto-provisioned SPN access to the
+      # ZeroBus credentials stored in the secret scope by the infra bundle.
+      #
+      # Each secret resource is available in app.yaml via:
+      #   env:
+      #     - name: ENV_VAR_NAME
+      #       valueFrom: <resource-name>
+      #
+      # The app.yaml maps these to environment variables that the AppKit
+      # server reads at startup (e.g. ZEROBUS_CLIENT_ID, ZEROBUS_ENDPOINT).
+      # -----------------------------------------------------------------------
+      resources:
+        # OAuth M2M client ID for ZeroBus authentication
+        - name: zerobus-client-id
+          description: ZeroBus SPN application_id (OAuth M2M client identifier)
+          secret:
+            scope: ${var.secret_scope_name}
+            key: ${var.client_id_dbs_key}
+            permission: READ
+
+        # OAuth M2M client secret for ZeroBus authentication
+        - name: zerobus-client-secret
+          description: ZeroBus SPN OAuth M2M client secret (admin-provisioned)
+          secret:
+            scope: ${var.secret_scope_name}
+            key: ${var.client_secret_dbs_key}
+            permission: READ
+
+        # Databricks workspace URL
+        - name: zerobus-workspace-url
+          description: Databricks workspace URL for SDK/API calls
+          secret:
+            scope: ${var.secret_scope_name}
+            key: workspace_url
+            permission: READ
+
+        # ZeroBus Ingest server endpoint
+        - name: zerobus-endpoint
+          description: ZeroBus Ingest server endpoint (derived from workspace ID + region)
+          secret:
+            scope: ${var.secret_scope_name}
+            key: zerobus_endpoint
+            permission: READ
+
+        # Fully qualified bronze table name
+        - name: zerobus-target-table
+          description: Fully qualified bronze table name (catalog.schema.wearables_zerobus)
+          secret:
+            scope: ${var.secret_scope_name}
+            key: target_table_name
+            permission: READ
+
+      # Base permissions — extended per-target below
+      permissions:
+        - user_name: matthew.giglia@databricks.com
+          level: CAN_MANAGE
+
+# ---------------------------------------------------------------------------
+# Target-specific overrides
+# ---------------------------------------------------------------------------
+targets:
+
+  dev:
+    resources:
+      apps:
+        zerobus_ingest:
+          permissions:
+            - user_name: matthew.giglia@databricks.com
+              level: CAN_MANAGE
+
+  hls_fde:
+    resources:
+      apps:
+        zerobus_ingest:
+          permissions:
+            - user_name: matthew.giglia@databricks.com
+              level: CAN_MANAGE
+            - service_principal_name: ${var.higher_level_service_principal}
+              level: CAN_MANAGE
+            - group_name: users
+              level: CAN_USE
+
+  prod:
+    resources:
+      apps:
+        zerobus_ingest:
+          permissions:
+            - user_name: matthew.giglia@databricks.com
+              level: CAN_MANAGE

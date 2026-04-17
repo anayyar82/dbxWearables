@@ -1,20 +1,16 @@
-# Databricks Asset Bundle — dbxW_zerobus_infra
-# Shared infrastructure for the dbxWearables ZeroBus solution.
-# Deploy this bundle BEFORE the primary dbxW_zerobus application bundle.
+# Databricks Asset Bundle — dbxW_zerobus_app
+# Application bundle for the dbxWearables ZeroBus solution.
+# Deploy this bundle AFTER the dbxW_zerobus_infra infrastructure bundle.
 #
-# Manages: secret scopes, Unity Catalog schemas/volumes/grants,
-#          SQL warehouses, and bootstrap DDL jobs.
+# Manages: AppKit REST API, ZeroBus SDK consumer, Spark Declarative
+#          Pipelines (silver/gold), jobs, and dashboards.
 #
 # See https://docs.databricks.com/en/dev-tools/bundles/settings.html
 
 bundle:
-  name: "dbxW_zerobus_infra"
+  name: "dbxW_zerobus_app"
 
 include:
-  - resources/*.schema.yml
-  - resources/*.secret_scope.yml
-  - resources/*.sql_warehouse.yml
-  - resources/*.job.yml
   - resources/*.yml
   - resources/*/*.yml
 
@@ -23,44 +19,32 @@ include:
 # Assigned per-target below; referenced in resource YAML files.
 # ---------------------------------------------------------------------------
 #
-# CONVENTION — schema & catalog references:
-#   The `catalog` and `schema` variables below feed ONLY into the schema
-#   resource definition (resources/wearables.schema.yml).
+# CONVENTION — catalog & schema references:
+#   Cross-bundle resource substitutions are NOT supported in DAB, so the
+#   app bundle maintains its own `catalog` and `schema` variables whose
+#   per-target values MUST match those deployed by the companion
+#   dbxW_zerobus_infra bundle.
 #
-#   All OTHER resources (jobs, pipelines, apps, volumes, etc.) in this
-#   bundle and in the companion dbxW_zerobus app bundle MUST reference
-#   the schema through deployed-resource substitutions:
+#   Infra bundle deploys (referenced by substitution within that bundle):
+#     - UC schema:      resources.schemas.wearables_schema
+#     - Secret scope:   resources.secret_scopes.zerobus_secret_scope
+#     - SQL warehouse:  resources.sql_warehouses.infra_warehouse
 #
-#     ${resources.schemas.wearables_schema.catalog_name}   — catalog
-#     ${resources.schemas.wearables_schema.name}            — schema
-#     ${resources.schemas.wearables_schema.id}              — schema ID (for pipeline targets)
+#   This app bundle references those objects by name/value:
+#     ${var.catalog}.${var.schema}      — fully qualified schema
+#     ${var.secret_scope_name}          — secret scope name
 #
-#   Similarly, the SQL warehouse is referenced as:
-#     ${resources.sql_warehouses.infra_warehouse.id}
-#
-#   This guarantees references are bound to the actual deployed object,
-#   not to a loosely-coupled variable that could drift.
-#
-# CONVENTION — secret scope key names:
-#   The `client_id_dbs_key` and `client_secret_dbs_key` variables control
-#   the key names used inside the shared secret scope. Targets override
-#   these to schema-qualified names (e.g. client_id_wearables) so that
-#   multiple schemas can share a single scope without key collisions.
-#
-#   These variables are passed to the UC setup job as parameters and used
-#   by the ensure-service-principal notebook to store/check secrets.
-#   The companion dbxW_zerobus_app bundle declares matching variables
-#   with identical per-target values.
+#   If the infra target values change, update BOTH bundles.
 # ---------------------------------------------------------------------------
 variables:
   catalog:
     description: >
       The Unity Catalog catalog for wearable data objects.
-      USED ONLY by the schema resource — see convention note above.
+      Must match the catalog deployed by dbxW_zerobus_infra for this target.
   schema:
     description: >
       The Unity Catalog schema name within the catalog.
-      USED ONLY by the schema resource — see convention note above.
+      Must match the schema deployed by dbxW_zerobus_infra for this target.
   secret_scope_name:
     description: The Databricks secret scope name for ZeroBus credentials.
     default: dbxw_zerobus_credentials
@@ -68,7 +52,7 @@ variables:
     description: The key name for the ZeroBus OAuth2 M2M client ID in the secret scope.
     default: client_id
   client_secret_dbs_key:
-    description: The key name for the ZeroBus OAuth2 M2M client secret in the secret scope.
+    description: The key name for the ZeroBus OAuth2 M2M client ID in the secret scope.
     default: client_secret
   run_as_user:
     description: The user or service principal that workflows should run as.
@@ -127,10 +111,10 @@ targets:
       root_path: /Workspace/Users/${var.run_as_user}/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: hls_fde_dev
-      schema: wearables
+      schema: dev_matthew_giglia_wearables
       run_as_user: matthew.giglia@databricks.com
-      client_id_dbs_key: client_id_dev_matthew_giglia_${var.schema}
-      client_secret_dbs_key: client_secret_dev_matthew_giglia_${var.schema}
+      client_id_dbs_key: client_id_${var.schema}
+      client_secret_dbs_key: client_secret_${var.schema}
 
   # ── hls_fde (production — same workspace as dev) ────────────────────────
   hls_fde:
@@ -156,7 +140,7 @@ targets:
       run_as_user: ${var.higher_level_service_principal}
       serverless_environment_version: "5"
       client_id_dbs_key: client_id_${var.schema}
-      client_secret_dbs_key: client_secret_${var.schema}
+      client_secret_dbs_key: client_secret_${var.schema} 
     permissions:
       - user_name: matthew.giglia@databricks.com
         level: CAN_MANAGE
