@@ -35,7 +35,6 @@
     "@databricks/appkit": "0.20.3",
     "@databricks/appkit-ui": "0.20.3",
     "@databricks/sdk-experimental": "^0.14.2",
-    "@databricks/zerobus-ingest-sdk": "*",
     "clsx": "^2.1.1",
     "embla-carousel-react": "^8.6.0",
     "lucide-react": "^0.546.0",
@@ -80,7 +79,6 @@
     "vitest": "^4.0.14"
   },
   "overrides": {
-    "vite": "npm:rolldown-vite@7.1.14",
-    "apache-arrow": "^21.1.0"
+    "vite": "npm:rolldown-vite@7.1.14"
   }
 }
