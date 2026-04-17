@@ -38,7 +38,7 @@
 resources:
   apps:
     zerobus_ingest:
-      name: dbxw-zerobus-ingest-${var.schema}
+      name: dbxw-0bus-ingest-${bundle.target}
 
       description: >
         AppKit (Node.js + React) application for wearable health data
