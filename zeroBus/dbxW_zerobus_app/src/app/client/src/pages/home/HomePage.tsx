@@ -12,7 +12,6 @@ import {
   Moon,
   Flame,
   Trash2,
-  Database,
 } from 'lucide-react';
 import { Link } from 'react-router';
 

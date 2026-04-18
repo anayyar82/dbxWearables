@@ -11,9 +11,7 @@ import {
   ChevronRight,
   UserCheck,
   RefreshCw,
-  LogOut,
   Fingerprint,
-  Layers,
   AlertTriangle,
 } from 'lucide-react';
 
