@@ -129,15 +129,25 @@ function extractHeaders(req: Request): Record<string, string> {
   return headers;
 }
 
+const MAX_NDJSON_LINES = 10000;
+
 /** Parse an NDJSON string into valid objects and per-line errors. */
 function parseNdjson(raw: string): { lines: unknown[]; errors: string[] } {
   const lines: unknown[] = [];
   const errors: string[] = [];
   const rawLines = raw.split(/\r?\n/).filter((l) => l.trim().length > 0);
 
-  for (let i = 0; i < rawLines.length; i++) {
+  if (rawLines.length > MAX_NDJSON_LINES) {
+    errors.push(
+      `Too many NDJSON lines (${rawLines.length}). Maximum allowed is ${MAX_NDJSON_LINES}.`,
+    );
+    return { lines, errors };
+  }
+
+  const boundedLines = rawLines.slice(0, MAX_NDJSON_LINES);
+  for (let i = 0; i < boundedLines.length; i++) {
     try {
-      lines.push(JSON.parse(rawLines[i]));
+      lines.push(JSON.parse(boundedLines[i]));
     } catch {
       errors.push(`Line ${i + 1}: invalid JSON`);
     }
