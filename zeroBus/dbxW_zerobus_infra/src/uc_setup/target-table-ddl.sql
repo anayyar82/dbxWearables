@@ -40,9 +40,10 @@ CREATE TABLE IF NOT EXISTS wearables_zerobus
   record_id STRING NOT NULL COMMENT 'Server-generated GUID for each ingested record',
   ingested_at TIMESTAMP COMMENT 'Server-side ingestion timestamp',
   body VARIANT COMMENT 'Raw NDJSON line payload stored as VARIANT for flexible JSON querying',
-  headers VARIANT COMMENT 'Full HTTP request headers as JSON — includes X-Record-Type, X-Device-Id, etc.',
-  record_type STRING COMMENT 'Extracted from X-Record-Type header (samples, workouts, sleep, activity_summaries, deletes)',
+  headers VARIANT COMMENT 'All HTTP headers except auth/cookie (blocklist stripped)',
+  record_type STRING COMMENT 'Extracted from X-Record-Type header — any non-empty string (open validation)',
   source_platform STRING COMMENT 'Extracted from X-Platform header — identifies data source (apple_healthkit, android_health_connect, etc.)',
+  user_id STRING COMMENT 'App-authenticated user ID from JWT claims — NULL until JWT auth is implemented',
   CONSTRAINT wearables_zerobus_pk PRIMARY KEY (record_id)
 )
 USING DELTA
@@ -61,9 +62,9 @@ TBLPROPERTIES (
 -- COMMAND ----------
 
 -- DBTITLE 1,Schema Evolution — Add source_platform Column
--- Schema evolution: adds the source_platform column to an existing table
--- that was created before this column was added to the DDL.
--- Existing rows will have NULL for source_platform (backfill not needed —
+-- Schema evolution: adds columns to an existing table that was created
+-- before these columns were added to the DDL.
+-- Existing rows will have NULL for these columns (backfill not needed —
 -- the silver layer can coalesce from headers::"x-platform" if required).
 --
 -- Note: ADD COLUMNS is idempotent in practice — if the column already exists
@@ -72,7 +73,8 @@ TBLPROPERTIES (
 
 ALTER TABLE wearables_zerobus
 ADD COLUMNS (
-  source_platform STRING COMMENT 'Extracted from X-Platform header — identifies data source (apple_healthkit, android_health_connect, etc.)'
+  source_platform STRING COMMENT 'Extracted from X-Platform header — identifies data source (apple_healthkit, android_health_connect, etc.)',
+  user_id STRING COMMENT 'App-authenticated user ID from JWT claims — NULL until JWT auth is implemented'
 );
 
 -- COMMAND ----------

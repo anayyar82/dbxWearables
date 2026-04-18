@@ -22,6 +22,7 @@
 //   headers         VARIANT           — HTTP request headers as JSON-encoded string
 //   record_type     STRING            — From X-Record-Type header
 //   source_platform STRING            — From X-Platform header (e.g. "apple_healthkit")
+//   user_id         STRING            — App-authenticated user ID from JWT claims
 //
 // REST API reference:
 //   https://docs.databricks.com/aws/en/ingestion/zerobus-ingest/
@@ -37,6 +38,7 @@ export interface WearablesRecord {
   headers: string;         // VARIANT     — JSON.stringify(httpHeaders)
   record_type: string;     // STRING      — e.g. "samples", "workouts", "sleep"
   source_platform: string; // STRING      — e.g. "apple_healthkit", "android_health_connect"
+  user_id: string;         // STRING      — app-authenticated user ID (default 'anonymous')
 }
 
 // ── Required env var names ───────────────────────────────────────────────
@@ -206,6 +208,7 @@ class ZeroBusService {
     headers: Record<string, string>,
     recordType: string,
     sourcePlatform: string,
+    userId: string = 'anonymous',
   ): WearablesRecord {
     return {
       record_id: crypto.randomUUID(),
@@ -214,6 +217,7 @@ class ZeroBusService {
       headers: JSON.stringify(headers), // VARIANT — JSON-encoded string
       record_type: recordType,
       source_platform: sourcePlatform,
+      user_id: userId,
     };
   }
 

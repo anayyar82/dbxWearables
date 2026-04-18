@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-18  
 **Bundle:** `dbxW_zerobus_app`  
-**Scope:** Bronze table schema validation, header capture redesign, `source_platform` column addition, ingestion permissiveness improvements
+**Scope:** Bronze table schema validation, header capture redesign, `source_platform` + `user_id` column additions, ingestion permissiveness improvements, user identity architecture planning
 
 ---
 
@@ -85,6 +85,18 @@ function extractHeaders(req: Request): Record<string, string> {
 - **Cell 18 (Best Practices Audit)** — Replaced recommendations with "Ingestion Design Principles" and "Remaining Considerations" sections
 - **Cells 14-18** — Added during schema review: markdown section header, header strategy, model mapping, offset analysis, best practices audit
 
+#### Phase 4: User Identity Column (user_id)
+
+**Problem:** No way to attribute ingested records to a specific user. HealthKit doesn't expose user identity (Apple privacy model), and `DeviceIdentifier.current` is per-installation, not per-person.
+
+**`user-identity-todo.md`** — Created comprehensive auth planning document at repo root. Architecture: App-Managed JWT Auth with Lakebase User Registry, Sign in with Apple, two-layer auth model (App→Workspace M2M existing, User→App JWT new).
+
+**`zerobus-service.ts`** — Added `user_id: string` to `WearablesRecord` interface. Added `userId` parameter to `buildRecord()` with default `'anonymous'`. Updated header comment to list 7th column.
+
+**`target-table-ddl` notebook (ID: 2686724970547991)** — Added `user_id STRING` column to `CREATE TABLE IF NOT EXISTS` DDL. Updated `ALTER TABLE ADD COLUMNS` cell to include both `source_platform` and `user_id`.
+
+**Live table** — Ran `ALTER TABLE hls_fde_dev.dev_matthew_giglia_wearables.wearables_zerobus ADD COLUMNS (user_id STRING ...)` to add column. Existing rows have `NULL`; new rows default to `'anonymous'` until JWT auth is implemented.
+
 ---
 
 ### Design Decisions
@@ -148,7 +160,7 @@ All 7 checks passed on `hls_fde_dev.dev_matthew_giglia_wearables.wearables_zerob
 
 ---
 
-### Final Bronze Table Schema (6 columns)
+### Final Bronze Table Schema (7 columns)
 
 ```sql
 CREATE TABLE wearables_zerobus (
@@ -158,6 +170,7 @@ CREATE TABLE wearables_zerobus (
   headers         VARIANT             -- ALL headers except auth/cookie
   record_type     STRING              -- Any non-empty string from X-Record-Type
   source_platform STRING              -- From X-Platform, default 'unknown'
+  user_id         STRING              -- App-authenticated user ID from JWT claims
 )
 ```
 
@@ -168,10 +181,11 @@ CREATE TABLE wearables_zerobus (
 | File | Status | Description |
 | --- | --- | --- |
 | `src/app/server/routes/zerobus/ingest-routes.ts` | Modified | Replaced HEADERS_TO_KEEP allowlist with HEADERS_TO_STRIP blocklist; opened X-Record-Type to any string; extract sourcePlatform |
-| `src/app/server/services/zerobus-service.ts` | Modified | Added `source_platform` to WearablesRecord interface and buildRecord() |
+| `src/app/server/services/zerobus-service.ts` | Modified | Added `source_platform` and `user_id` to WearablesRecord interface and buildRecord() |
 | `src/endpoint-validation/validate-zerobus-ingest` (notebook) | Modified | Added schema review cells (14-18), updated POST headers, query columns, analysis cells |
-| `dbxW_zerobus_infra: src/uc_setup/target-table-ddl` (notebook 2686724970547991) | Modified | Added source_platform to CREATE TABLE DDL; added ALTER TABLE ADD COLUMNS cell |
-| Live table: `hls_fde_dev.dev_matthew_giglia_wearables.wearables_zerobus` | Altered | Added source_platform STRING column via ALTER TABLE |
+| `dbxW_zerobus_infra: src/uc_setup/target-table-ddl` (notebook 2686724970547991) | Modified | Added source_platform and user_id to CREATE TABLE DDL; ALTER TABLE ADD COLUMNS for both |
+| Live table: `hls_fde_dev.dev_matthew_giglia_wearables.wearables_zerobus` | Altered | Added source_platform and user_id STRING columns via ALTER TABLE |
+| `user-identity-todo.md` (repo root) | Created | JWT auth architecture planning doc (Sign in with Apple + Lakebase user registry) |
 | `fixtures/sessions/2026-04-18_bronze-schema-review-permissive-ingestion.md` | Created | This file |
 | `fixtures/sessions/INDEX.md` | Updated | Added this session entry |
 
@@ -179,8 +193,9 @@ CREATE TABLE wearables_zerobus (
 
 ### Next Steps
 
-1. **Redeploy app** — `databricks bundle deploy --target dev` to pick up the ingest-routes.ts and zerobus-service.ts changes
-2. **Re-run validation notebook** — Verify `source_platform` is populated and full headers are captured
+1. **Redeploy app** — `databricks bundle deploy --target dev` to pick up zerobus-service.ts (`user_id`) and ingest-routes.ts changes
+2. **Re-run validation notebook** — Verify `source_platform` populated, `user_id = 'anonymous'`, full headers captured
 3. **iOS integration test** — Set `DBX_API_BASE_URL` and run end-to-end sync from device
-4. **Define SDP pipeline** — Silver layer parsing `body` VARIANT per `record_type`, dedup on `body:uuid`
-5. **Consider `body:uuid` denormalization** — Top-level column for silver-layer dedup without VARIANT parsing
+4. **Implement JWT auth** — Phase 1-3 from `user-identity-todo.md` (Lakebase schema → auth endpoints → JWT middleware)
+5. **Define SDP pipeline** — Silver layer parsing `body` VARIANT per `record_type`, dedup on `body:uuid`
+6. **Consider `body:uuid` denormalization** — Top-level column for silver-layer dedup without VARIANT parsing
