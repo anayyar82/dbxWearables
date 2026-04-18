@@ -62,20 +62,21 @@ TBLPROPERTIES (
 -- COMMAND ----------
 
 -- DBTITLE 1,Schema Evolution — Add source_platform Column
--- Schema evolution: adds columns to an existing table that was created
--- before these columns were added to the DDL.
--- Existing rows will have NULL for these columns (backfill not needed —
--- the silver layer can coalesce from headers::"x-platform" if required).
---
--- Note: ADD COLUMNS is idempotent in practice — if the column already exists
--- with the same type, Databricks silently succeeds. If it exists with a
--- different type, the command will fail (which is the correct behavior).
-
-ALTER TABLE wearables_zerobus
-ADD COLUMNS (
-  source_platform STRING COMMENT 'Extracted from X-Platform header — identifies data source (apple_healthkit, android_health_connect, etc.)',
-  user_id STRING COMMENT 'App-authenticated user ID from JWT claims — NULL until JWT auth is implemented'
-);
+-- MAGIC %skip
+-- MAGIC -- Schema evolution: adds columns to an existing table that was created
+-- MAGIC -- before these columns were added to the DDL.
+-- MAGIC -- Existing rows will have NULL for these columns (backfill not needed —
+-- MAGIC -- the silver layer can coalesce from headers::"x-platform" if required).
+-- MAGIC --
+-- MAGIC -- Note: ADD COLUMNS is idempotent in practice — if the column already exists
+-- MAGIC -- with the same type, Databricks silently succeeds. If it exists with a
+-- MAGIC -- different type, the command will fail (which is the correct behavior).
+-- MAGIC
+-- MAGIC ALTER TABLE wearables_zerobus
+-- MAGIC ADD COLUMNS (
+-- MAGIC   source_platform STRING COMMENT 'Extracted from X-Platform header — identifies data source (apple_healthkit, android_health_connect, etc.)',
+-- MAGIC   user_id STRING COMMENT 'App-authenticated user ID from JWT claims — NULL until JWT auth is implemented'
+-- MAGIC );
 
 -- COMMAND ----------
 
