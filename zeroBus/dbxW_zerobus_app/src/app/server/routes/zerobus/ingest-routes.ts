@@ -36,6 +36,13 @@
 //     no server deploy needed to capture them
 //   - Silver layer decides what matters; bronze preserves everything
 //
+// ── User identity extraction ─────────────────────────────────────
+//
+// AppKit's reverse proxy validates the Bearer token, strips the
+// Authorization header, and injects x-forwarded-email with the user's
+// email. We use this directly — no JWT decoding needed. Falls back to
+// 'anonymous' if the header is missing (unauthenticated requests).
+//
 // ── Record type strategy ─────────────────────────────────────────────
 //
 // X-Record-Type accepts any non-empty string. Known types are logged at
@@ -87,9 +94,10 @@ const textParser = express.text({
  * VARIANT handles arbitrary JSON, and the silver layer filters what it needs.
  */
 const HEADERS_TO_STRIP = new Set([
-  'authorization',  // OAuth tokens — queryable by anyone with SELECT
-  'cookie',         // Session tokens
-  'set-cookie',     // Response cookies (shouldn't appear, but defensive)
+  'authorization',            // OAuth tokens — queryable by anyone with SELECT
+  'x-forwarded-access-token', // AppKit-injected raw JWT — same risk as authorization
+  'cookie',                   // Session tokens
+  'set-cookie',               // Response cookies (shouldn't appear, but defensive)
 ]);
 
 /**
@@ -152,6 +160,29 @@ function extractNdjsonBody(req: Request): string {
     return JSON.stringify(req.body);
   }
   return '';
+}
+
+/**
+ * Extract user identity from the AppKit-injected forwarded headers.
+ *
+ * AppKit's reverse proxy validates the Bearer token and strips the
+ * Authorization header before forwarding to Express. The proxy injects:
+ *   x-forwarded-email             — user's email (e.g. "user@databricks.com")
+ *   x-forwarded-preferred-username — display name
+ *   x-forwarded-user              — workspace user ID
+ *   x-forwarded-access-token      — original JWT (for downstream use)
+ *
+ * We use x-forwarded-email as the user_id since it matches
+ * current_user() in Spark SQL and is human-readable.
+ *
+ * Falls back to 'anonymous' for unauthenticated requests (e.g., iOS
+ * app before JWT auth is implemented, or development/testing).
+ */
+function extractUserFromToken(req: Request): string {
+  const email = req.headers['x-forwarded-email'];
+  return typeof email === 'string' && email.length > 0
+    ? email
+    : 'anonymous';
 }
 
 // ── AppKit interface (only the server plugin is needed) ────────────────
@@ -229,9 +260,10 @@ export async function setupZeroBusRoutes(appkit: AppKitServer) {
     // 1. Validate X-Record-Type header (any non-empty string)
     // 2. Extract NDJSON body (handles string, object, Buffer states)
     // 3. Parse NDJSON into individual JSON objects
-    // 4. Build WearablesRecord per line (UUID, timestamp, VARIANT columns)
-    // 5. Batch-ingest via ZeroBus REST API
-    // 6. Return success response with record IDs
+    // 4. Extract user identity from Bearer JWT (sub claim)
+    // 5. Build WearablesRecord per line (UUID, timestamp, VARIANT columns)
+    // 6. Batch-ingest via ZeroBus REST API
+    // 7. Return success response with record IDs
 
     app.post(
       '/api/v1/healthkit/ingest',
@@ -290,8 +322,9 @@ export async function setupZeroBusRoutes(appkit: AppKitServer) {
           const headers = extractHeaders(req);
           const sourcePlatform =
             (req.headers['x-platform'] as string | undefined)?.toLowerCase() || 'unknown';
+          const userId = extractUserFromToken(req);
           const records: WearablesRecord[] = lines.map((line) =>
-            zeroBusService.buildRecord(line, headers, recordType, sourcePlatform),
+            zeroBusService.buildRecord(line, headers, recordType, sourcePlatform, userId),
           );
 
           // — Ingest via ZeroBus REST API ───────────────────────
