@@ -176,7 +176,7 @@ function ArchitectureSection() {
       subtitle: 'Bronze Table',
       desc: 'Raw NDJSON stored as VARIANT column. Full HTTP headers preserved. Schema-on-read for maximum flexibility.',
       color: 'bg-[var(--dbx-green)]',
-      image: '/images/unity-catalog-lockup-no-db-full-color.svg',
+      image: '/images/unity-catalog-lockup-no-db-full-color-white.svg',
     },
     {
       icon: Layers,
@@ -303,7 +303,7 @@ function ZeroBusSection() {
                 <span className="text-xs font-medium text-[var(--muted-foreground)]">ZeroBus</span>
               </div>
               <div className="flex items-center gap-2">
-                <img src="/images/unity-catalog-lockup-no-db-full-color.svg" alt="Unity Catalog" className="h-5" />
+                <img src="/images/unity-catalog-lockup-no-db-full-color-white.svg" alt="Unity Catalog" className="h-5" />
               </div>
             </div>
           </div>
@@ -512,7 +512,7 @@ function MedallionSection() {
         {/* Unity Catalog badge */}
         <div className="mt-8 flex justify-center">
           <div className="inline-flex items-center gap-3 px-5 py-3 rounded-xl bg-[var(--muted)] border border-[var(--border)]">
-            <img src="/images/unity-catalog-lockup-no-db-full-color.svg" alt="Unity Catalog" className="h-6" />
+            <img src="/images/unity-catalog-lockup-no-db-full-color-white.svg" alt="Unity Catalog" className="h-6" />
             <span className="text-xs text-[var(--muted-foreground)]">All tables governed by Unity Catalog</span>
           </div>
         </div>
