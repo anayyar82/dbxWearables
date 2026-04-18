@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Activity,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -9,7 +8,6 @@ import {
   Database,
   Radio,
   Clock,
-  Wifi,
 } from 'lucide-react';
 
 /* ═══════════════════════════════════════════════════════════════════
