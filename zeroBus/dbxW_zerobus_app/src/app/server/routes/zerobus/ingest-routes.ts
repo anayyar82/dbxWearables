@@ -27,13 +27,28 @@
 //   - application/ndjson    (alternative NDJSON MIME type)
 //   - text/plain            (fallback, bypasses JSON parser entirely)
 //
-// Request contract (iOS app → this endpoint):
+// ── Header capture strategy ──────────────────────────────────────────
+//
+// Bronze layer captures ALL headers EXCEPT a small blocklist of security-
+// sensitive ones (authorization, cookie). This is intentionally permissive:
+//   - VARIANT column handles arbitrary JSON — schema-on-read at bronze
+//   - New platforms (Android, Fitbit, Garmin) send different headers—
+//     no server deploy needed to capture them
+//   - Silver layer decides what matters; bronze preserves everything
+//
+// ── Record type strategy ─────────────────────────────────────────────
+//
+// X-Record-Type accepts any non-empty string. Known types are logged at
+// info level; unknown types are logged at warn level for visibility but
+// still ingested. This lets new record types be added to clients without
+// requiring a server-side deploy.
+//
+// Request contract (any client → this endpoint):
 //   Content-Type: application/x-ndjson
-//   X-Record-Type: samples | workouts | sleep | activity_summaries | deletes
-//   X-Platform: apple_healthkit (identifies data source platform)
+//   X-Record-Type: <any non-empty string>
 //   Body: one JSON object per line (NDJSON)
 //
-// Response contract (this endpoint → iOS app):
+// Response contract (this endpoint → client):
 //   { status: "success"|"error", message: string, record_id?: string,
 //     records_ingested?: number, record_ids?: string[], duration_ms?: number }
 //   (compatible with iOS APIResponse.swift — unknown keys ignored)
@@ -43,9 +58,9 @@ import type { Application, Request, Response, NextFunction } from 'express';
 import { zeroBusService } from '../../services/zerobus-service';
 import type { WearablesRecord } from '../../services/zerobus-service';
 
-// ── Valid X-Record-Type values (matches iOS record type enum) ──────────
+// ── Known X-Record-Type values (for logging, NOT validation) ──────────
 
-const VALID_RECORD_TYPES = new Set([
+const KNOWN_RECORD_TYPES = new Set([
   'samples',
   'workouts',
   'sleep',
@@ -64,26 +79,33 @@ const textParser = express.text({
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-/** Headers worth preserving alongside each record for debugging/audit. */
-const HEADERS_TO_KEEP = [
-  'x-record-type',
-  'x-device-id',
-  'x-platform',
-  'x-app-version',
-  'x-upload-timestamp',
-  'x-sync-session-id',
-  'x-batch-index',
-  'x-batch-count',
-  'content-type',
-  'user-agent',
-];
+/**
+ * Security-sensitive headers that must NOT be stored in the bronze table.
+ * These are stripped before writing to the headers VARIANT column.
+ *
+ * Everything else is captured — the bronze layer is intentionally permissive.
+ * VARIANT handles arbitrary JSON, and the silver layer filters what it needs.
+ */
+const HEADERS_TO_STRIP = new Set([
+  'authorization',  // OAuth tokens — queryable by anyone with SELECT
+  'cookie',         // Session tokens
+  'set-cookie',     // Response cookies (shouldn't appear, but defensive)
+]);
 
-/** Extract a sanitized subset of HTTP headers for VARIANT storage. */
+/**
+ * Extract ALL HTTP headers except security-sensitive ones.
+ *
+ * Blocklist approach: capture everything by default, strip only what’s
+ * dangerous. This is more resilient than an allowlist — new headers from
+ * any platform (iOS, Android, Fitbit, Garmin) are automatically captured
+ * without requiring a server-side code change.
+ */
 function extractHeaders(req: Request): Record<string, string> {
   const headers: Record<string, string> = {};
-  for (const key of HEADERS_TO_KEEP) {
-    const value = req.headers[key];
-    if (typeof value === 'string') headers[key] = value;
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (!HEADERS_TO_STRIP.has(key) && typeof value === 'string') {
+      headers[key] = value;
+    }
   }
   return headers;
 }
@@ -204,7 +226,7 @@ export async function setupZeroBusRoutes(appkit: AppKitServer) {
 
     // ── POST /api/v1/healthkit/ingest ────────────────────────────
     //
-    // 1. Validate X-Record-Type header
+    // 1. Validate X-Record-Type header (any non-empty string)
     // 2. Extract NDJSON body (handles string, object, Buffer states)
     // 3. Parse NDJSON into individual JSON objects
     // 4. Build WearablesRecord per line (UUID, timestamp, VARIANT columns)
@@ -218,17 +240,25 @@ export async function setupZeroBusRoutes(appkit: AppKitServer) {
         const startMs = Date.now();
 
         try {
-          // — Validate X-Record-Type header ─────────────────────────
+          // — Validate X-Record-Type header (any non-empty string) ─────
           const recordType = (
             req.headers['x-record-type'] as string | undefined
-          )?.toLowerCase();
+          )?.toLowerCase()?.trim();
 
-          if (!recordType || !VALID_RECORD_TYPES.has(recordType)) {
+          if (!recordType) {
             res.status(400).json({
               status: 'error',
-              message: `Missing or invalid X-Record-Type header. Expected one of: ${[...VALID_RECORD_TYPES].join(', ')}`,
+              message:
+                'Missing X-Record-Type header. Provide any non-empty string identifying the payload type (e.g., "samples", "workouts", "sleep").',
             });
             return;
+          }
+
+          // Log unknown types at warn level for visibility, but don't reject
+          if (!KNOWN_RECORD_TYPES.has(recordType)) {
+            console.warn(
+              `[ZeroBus] Unknown record type "${recordType}" — ingesting anyway (bronze accepts all types)`,
+            );
           }
 
           // — Extract NDJSON body (handles all middleware states) ────────
