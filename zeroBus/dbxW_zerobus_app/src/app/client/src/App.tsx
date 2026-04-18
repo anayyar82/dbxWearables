@@ -1,38 +1,44 @@
-import { createBrowserRouter, RouterProvider, NavLink, Outlet } from 'react-router';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@databricks/appkit-ui/react';
-import { LakebasePage } from './pages/lakebase/LakebasePage';
-
-const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-    isActive
-      ? 'bg-primary text-primary-foreground'
-      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-  }`;
+import { createBrowserRouter, RouterProvider, Outlet } from 'react-router';
+import { Navbar } from '@/components/Navbar';
+import { HomePage } from '@/pages/home/HomePage';
+import { HealthPage } from '@/pages/health/HealthPage';
+import { DocsPage } from '@/pages/docs/DocsPage';
+import { LakebasePage } from '@/pages/lakebase/LakebasePage';
 
 function Layout() {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="border-b px-6 py-3 flex items-center gap-4">
-        <h1 className="text-lg font-semibold text-foreground">wearables-0bus-gateway</h1>
-        <nav className="flex gap-1">
-          <NavLink to="/" end className={navLinkClass}>
-            Home
-          </NavLink>
-          <NavLink to="/lakebase" className={navLinkClass}>
-            Lakebase
-          </NavLink>
-        </nav>
-      </header>
-
-      <main className="flex-1 p-6">
+    <div className="min-h-screen bg-[var(--background)] flex flex-col">
+      <Navbar />
+      <main className="flex-1">
         <Outlet />
       </main>
+      <Footer />
     </div>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="bg-[var(--dbx-navy)] text-gray-400 text-xs py-6 px-6">
+      <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-white">dbxWearables</span>
+          <span className="text-gray-500">|</span>
+          <span>ZeroBus Health Data Gateway</span>
+        </div>
+        <div className="flex items-center gap-4">
+          <span>Powered by Databricks AppKit</span>
+          <a
+            href="https://docs.databricks.com/aws/en/ingestion/zerobus-overview/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[var(--dbx-red)] hover:text-[var(--dbx-orange)] transition-colors"
+          >
+            ZeroBus Docs →
+          </a>
+        </div>
+      </div>
+    </footer>
   );
 }
 
@@ -41,6 +47,8 @@ const router = createBrowserRouter([
     element: <Layout />,
     children: [
       { path: '/', element: <HomePage /> },
+      { path: '/health', element: <HealthPage /> },
+      { path: '/docs', element: <DocsPage /> },
       { path: '/lakebase', element: <LakebasePage /> },
     ],
   },
@@ -48,50 +56,4 @@ const router = createBrowserRouter([
 
 export default function App() {
   return <RouterProvider router={router} />;
-}
-
-function HomePage() {
-  return (
-    <div className="max-w-2xl mx-auto space-y-6 mt-8">
-      <div className="text-center">
-        <h2 className="text-3xl font-bold mb-2 text-foreground">
-          Welcome to your Databricks App
-        </h2>
-        <p className="text-lg text-muted-foreground">
-          Powered by Databricks AppKit
-        </p>
-      </div>
-
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle>Getting Started</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">Your app is ready. Explore the resources below to continue building.</p>
-          <ul className="space-y-2 text-sm">
-            <li>
-              <a
-                href="https://github.com/databricks/appkit"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary underline underline-offset-4 hover:text-primary/80"
-              >
-                AppKit on GitHub →
-              </a>
-            </li>
-            <li>
-              <a
-                href="https://databricks.github.io/appkit/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary underline underline-offset-4 hover:text-primary/80"
-              >
-                AppKit documentation →
-              </a>
-            </li>
-          </ul>
-        </CardContent>
-      </Card>
-    </div>
-  );
 }
