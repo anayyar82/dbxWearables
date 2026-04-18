@@ -3,7 +3,7 @@ import { Navbar } from '@/components/Navbar';
 import { HomePage } from '@/pages/home/HomePage';
 import { HealthPage } from '@/pages/health/HealthPage';
 import { DocsPage } from '@/pages/docs/DocsPage';
-import { LakebasePage } from '@/pages/lakebase/LakebasePage';
+import { SecurityPage } from '@/pages/security/SecurityPage';
 
 function Layout() {
   return (
@@ -85,7 +85,7 @@ const router = createBrowserRouter([
       { path: '/', element: <HomePage /> },
       { path: '/status', element: <HealthPage /> },
       { path: '/docs', element: <DocsPage /> },
-      { path: '/lakebase', element: <LakebasePage /> },
+      { path: '/security', element: <SecurityPage /> },
     ],
   },
 ]);

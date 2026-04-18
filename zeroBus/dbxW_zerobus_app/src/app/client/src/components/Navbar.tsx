@@ -3,14 +3,14 @@ import {
   Home,
   FileText,
   Activity,
-  Database,
+  Shield,
 } from 'lucide-react';
 
 const navItems = [
   { to: '/', label: 'Overview', icon: Home, end: true },
   { to: '/status', label: 'Health Status', icon: Activity },
   { to: '/docs', label: 'API Docs', icon: FileText },
-  { to: '/lakebase', label: 'Lakebase', icon: Database },
+  { to: '/security', label: 'Security', icon: Shield },
 ];
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>

@@ -5,8 +5,6 @@ import {
   Layers,
   ArrowRight,
   Zap,
-  Lock,
-  Shield,
   Radio,
   BarChart3,
   Heart,
@@ -30,7 +28,6 @@ export function HomePage() {
       <ArchitectureDiagramSection />
       <ArchitectureSection />
       <ZeroBusSection />
-      <AuthSection />
       <RecordTypesSection />
       <MedallionSection />
     </div>
@@ -85,6 +82,12 @@ function HeroSection() {
                 className="bg-white/10 border border-white/20 text-white px-6 py-3 rounded-lg font-semibold text-sm hover:bg-white/20 transition-all"
               >
                 System Health
+              </Link>
+              <Link
+                to="/security"
+                className="bg-white/10 border border-white/20 text-white px-6 py-3 rounded-lg font-semibold text-sm hover:bg-white/20 transition-all"
+              >
+                Security Design
               </Link>
             </div>
 
@@ -334,86 +337,6 @@ POST /api/v1/healthkit/ingest
 `}<span className="comment">// → Data lands in Unity Catalog table</span>{`
 `}<span className="comment">//   as VARIANT (schema-on-read)</span></pre>
           </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ── Authentication ───────────────────────────────────────────────── */
-function AuthSection() {
-  const authMethods = [
-    {
-      icon: Lock,
-      title: 'Bearer JWT (Mobile Clients)',
-      priority: 'Priority 1',
-      desc: 'Direct client authentication via Bearer token. The iOS/Android app obtains a JWT from Lakebase, which is validated on each request. The token\'s sub claim (Lakebase user UUID) becomes the user_id.',
-      status: 'In Development',
-      statusColor: 'text-amber-500 bg-amber-50',
-    },
-    {
-      icon: Shield,
-      title: 'x-forwarded-email (Workspace)',
-      priority: 'Priority 2',
-      desc: 'For requests originating from Databricks notebooks, jobs, or services. AppKit\'s reverse proxy injects the authenticated user\'s email after OAuth validation. Cannot be spoofed — the proxy strips client-supplied forwarded headers.',
-      status: 'Active',
-      statusColor: 'text-[var(--dbx-green)] bg-emerald-50',
-    },
-    {
-      icon: Shield,
-      title: 'Anonymous (Fallback)',
-      priority: 'Priority 3',
-      desc: 'When no authentication context is available — pre-auth clients, health checks, or development/testing. Records are still ingested but tagged with user_id = "anonymous".',
-      status: 'Active',
-      statusColor: 'text-[var(--dbx-green)] bg-emerald-50',
-    },
-  ];
-
-  return (
-    <section className="py-20 px-6 bg-[var(--background)]">
-      <div className="max-w-5xl mx-auto">
-        <SectionHeader
-          label="Security"
-          title="Authentication &amp; Identity"
-          subtitle="Three-way priority for determining user identity on each request."
-        />
-
-        <div className="space-y-4 mt-12">
-          {authMethods.map((method, i) => (
-            <div
-              key={i}
-              className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-6 flex gap-6 items-start hover:shadow-md transition-shadow"
-            >
-              <div className="w-12 h-12 rounded-xl bg-[var(--dbx-dark-teal)] flex items-center justify-center flex-shrink-0">
-                <method.icon className="h-6 w-6 text-white" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-1">
-                  <h3 className="font-bold text-[var(--foreground)]">{method.title}</h3>
-                  <span className="text-xs font-mono text-[var(--muted-foreground)]">{method.priority}</span>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${method.statusColor}`}>
-                    {method.status}
-                  </span>
-                </div>
-                <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">{method.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Lakebase auth detail */}
-        <div className="mt-8 bg-[var(--dbx-dark-teal)] rounded-xl p-6 text-white">
-          <h4 className="font-bold mb-3 flex items-center gap-2">
-            <Database className="h-5 w-5" />
-            Lakebase — Operational Database for Auth State
-          </h4>
-          <p className="text-gray-300 text-sm leading-relaxed">
-            Lakebase (Postgres-compatible) manages user registration, JWT token issuance,
-            and session state. The AppKit app connects via the <code className="text-[var(--dbx-orange)] bg-white/10 px-1.5 py-0.5 rounded text-xs">lakebase</code> plugin
-            which handles OAuth token rotation and connection pooling automatically.
-            The ZeroBus service principal credentials are stored in a Databricks secret scope,
-            separate from user-facing auth.
-          </p>
         </div>
       </div>
     </section>
