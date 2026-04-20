@@ -61,7 +61,7 @@ export function HealthPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-[var(--foreground)] flex items-center gap-3">
-            <img src="/images/databricks-symbol-color.svg" alt="" className="h-8 w-8" />
+            <img src="/images/apps-lockup-no-db-full-color.svg" alt="Databricks Apps" className="h-8" />
             System Health
           </h1>
           <p className="text-[var(--muted-foreground)] mt-1">

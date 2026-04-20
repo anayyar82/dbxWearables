@@ -156,7 +156,7 @@ function ArchitectureSection() {
       subtitle: 'REST API',
       desc: 'Express server receives NDJSON payloads, validates headers, extracts user identity, and forwards to the ZeroBus SDK.',
       color: 'bg-[var(--dbx-lava-600)]',
-      image: '/images/databricks-symbol-color.svg',
+      image: '/images/apps-lockup-no-db-full-color-white-container.svg',
     },
     {
       brandKey: 'streaming',
@@ -164,7 +164,7 @@ function ArchitectureSection() {
       subtitle: 'Stream Bridge',
       desc: 'Streams records into Unity Catalog bronze table with no external infrastructure. Decouples API from table writes.',
       color: 'bg-[var(--dbx-lava-500)]',
-      image: '/images/databricks-symbol-color.svg',
+      image: '/images/data-streaming-icon-full-color-container.svg',
     },
     {
       icon: null,
@@ -180,7 +180,7 @@ function ArchitectureSection() {
       subtitle: 'Silver → Gold',
       desc: 'Spark Declarative Pipelines read bronze, clean and validate to silver, aggregate to gold for analytics.',
       color: 'bg-purple-600',
-      image: null,
+      image: '/images/apache-spark-logo-white-rgb.svg',
     },
   ];
 
@@ -291,12 +291,10 @@ function ZeroBusSection() {
             {/* Powered by badges */}
             <div className="flex items-center gap-6 mt-8 pt-6 border-t border-[var(--border)]">
               <div className="flex items-center gap-2">
-                <img src="/images/databricks-symbol-color.svg" alt="" className="h-6 w-6" />
-                <span className="text-xs font-medium text-[var(--muted-foreground)]">AppKit</span>
+                <img src="/images/apps-lockup-no-db-full-color.svg" alt="AppKit" className="h-5" />
               </div>
               <div className="flex items-center gap-2">
-                <img src="/images/databricks-symbol-color.svg" alt="" className="h-6 w-6" />
-                <span className="text-xs font-medium text-[var(--muted-foreground)]">ZeroBus</span>
+                <img src="/images/data-streaming-lockup-no-db-full-color-white.svg" alt="ZeroBus" className="h-5" />
               </div>
               <div className="flex items-center gap-2">
                 <img src="/images/unity-catalog-lockup-no-db-full-color-white.svg" alt="Unity Catalog" className="h-5" />
