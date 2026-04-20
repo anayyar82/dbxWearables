@@ -83,7 +83,7 @@ function AuthFlowDiagram() {
 function TwoLayerModel() {
   const layers = [
     {
-      brandKey: 'smartphone',
+      brandKey: 'smartphone' as const,
       direction: 'User → App',
       title: 'User Authentication',
       mechanism: 'App-issued JWT via Sign in with Apple',
@@ -98,7 +98,7 @@ function TwoLayerModel() {
       ],
     },
     {
-      brandKey: 'webhook',
+      brandKey: 'webhook' as const,
       direction: 'App → Workspace',
       title: 'Service Principal Auth',
       mechanism: 'M2M OAuth client credentials',
@@ -128,7 +128,7 @@ function TwoLayerModel() {
             <div key={i} className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden">
               <div className="bg-[var(--dbx-navy-800)] p-5 text-white">
                 <div className="flex items-center gap-3 mb-2">
-                  {'brandKey' in layer ? <BrandIcon name={layer.brandKey} className="h-6 w-6" /> : null}
+                  {'brandKey' in layer ? <BrandIcon name={(layer as any).brandKey} className="h-6 w-6" /> : null}
                   <span className="text-xs font-mono text-gray-400">{layer.direction}</span>
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${layer.statusColor}`}>
                     {layer.status}
@@ -236,7 +236,7 @@ function TokenLifecycle() {
       iosStorage: 'Transient (not stored)',
       serverStorage: 'Not stored',
       purpose: 'Exchanged once during Sign in with Apple → validates user identity',
-      brandKey: 'authentication',
+      brandKey: 'authentication' as const,
     },
     {
       name: 'App Access JWT',
@@ -244,7 +244,7 @@ function TokenLifecycle() {
       iosStorage: 'Keychain (KeychainHelper)',
       serverStorage: 'Not stored (stateless)',
       purpose: 'Bearer token for all API calls — carries user_id in sub claim',
-      brandKey: 'encryption',
+      brandKey: 'encryption' as const,
     },
     {
       name: 'App Refresh Token',
@@ -270,7 +270,7 @@ function TokenLifecycle() {
             <div key={i} className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 hover:shadow-md transition-shadow">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-lg bg-[var(--dbx-navy-800)] flex items-center justify-center">
-                  {'brandKey' in t ? <BrandIcon name={t.brandKey} className="h-5 w-5" /> : <t.icon className="h-5 w-5 text-white" />}
+                  {'brandKey' in t ? <BrandIcon name={(t as any).brandKey} className="h-5 w-5" /> : <t.icon className="h-5 w-5 text-white" />}
                 </div>
                 <div>
                   <h3 className="font-bold text-sm text-[var(--foreground)]">{t.name}</h3>

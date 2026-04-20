@@ -6,7 +6,6 @@ import {
   Trash2,
 } from 'lucide-react';
 import { BrandIcon } from '@/components/BrandIcon';
-import { icon } from '@/icons';
 import { Link } from 'react-router';
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -135,7 +134,7 @@ function ArchitectureDiagramSection() {
 function ArchitectureSection() {
   const steps = [
     {
-      brandKey: 'iot',
+      brandKey: 'iot' as const,
       title: 'Apple HealthKit',
       subtitle: 'Data Source',
       desc: 'Apple Watch and Health app collect activity, workouts, sleep, and vitals. The iOS app reads data via anchored HealthKit queries.',
@@ -143,7 +142,7 @@ function ArchitectureSection() {
       image: null,
     },
     {
-      brandKey: 'smartphone',
+      brandKey: 'smartphone' as const,
       title: 'iOS App',
       subtitle: 'NDJSON Serializer',
       desc: 'SwiftUI app maps HKSamples to Codable structs, serializes as NDJSON, and POSTs batches with X-Record-Type headers.',
@@ -151,7 +150,7 @@ function ArchitectureSection() {
       image: null,
     },
     {
-      brandKey: 'webhook',
+      brandKey: 'webhook' as const,
       title: 'AppKit Gateway',
       subtitle: 'REST API',
       desc: 'Express server receives NDJSON payloads, validates headers, extracts user identity, and forwards to the ZeroBus SDK.',
@@ -159,7 +158,7 @@ function ArchitectureSection() {
       image: '/images/apps-lockup-no-db-full-color-white-container.svg',
     },
     {
-      brandKey: 'streaming',
+      brandKey: 'streaming' as const,
       title: 'ZeroBus',
       subtitle: 'Stream Bridge',
       desc: 'Streams records into Unity Catalog bronze table with no external infrastructure. Decouples API from table writes.',
@@ -175,7 +174,7 @@ function ArchitectureSection() {
       image: '/images/unity-catalog-lockup-no-db-full-color-white.svg',
     },
     {
-      brandKey: 'delta-live-tables',
+      brandKey: 'delta-live-tables' as const,
       title: 'SDP Pipeline',
       subtitle: 'Silver → Gold',
       desc: 'Spark Declarative Pipelines read bronze, clean and validate to silver, aggregate to gold for analytics.',
@@ -213,7 +212,7 @@ function ArchitectureSection() {
                   </div>
                 ) : step.brandKey ? (
                   <div className={`${step.color} w-12 h-12 rounded-xl flex items-center justify-center mb-4`}>
-                    <BrandIcon name={step.brandKey} className="h-6 w-6" />
+                    <BrandIcon name={step.brandKey as any} className="h-6 w-6" />
                   </div>
                 ) : null}
 
@@ -359,7 +358,7 @@ function RecordTypesSection() {
               <div className="flex items-center gap-3 mb-3">
                 <div className={`${t.color} w-10 h-10 rounded-lg flex items-center justify-center`}>
                   {'brandKey' in t
-                    ? <BrandIcon name={t.brandKey} className="h-5 w-5" />
+                    ? <BrandIcon name={(t as any).brandKey} className="h-5 w-5" />
                     : <t.icon className="h-5 w-5 text-white" />
                   }
                 </div>
