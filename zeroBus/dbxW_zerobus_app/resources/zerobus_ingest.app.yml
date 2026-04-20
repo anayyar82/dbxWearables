@@ -115,10 +115,12 @@ resources:
             database: ${var.postgres_database}
             permission: CAN_CONNECT_AND_CREATE
 
-      # Base permissions — extended per-target below
+      # Base permissions — all workspace users can use the app
       permissions:
         - user_name: matthew.giglia@databricks.com
           level: CAN_MANAGE
+        - group_name: users
+          level: CAN_USE
 
 # ---------------------------------------------------------------------------
 # Target-specific overrides
@@ -133,6 +135,8 @@ targets:
           permissions:
             - user_name: matthew.giglia@databricks.com
               level: CAN_MANAGE
+            - group_name: users
+              level: CAN_USE
 
   hls_fde:
     resources:
@@ -154,3 +158,5 @@ targets:
           permissions:
             - user_name: matthew.giglia@databricks.com
               level: CAN_MANAGE
+            - group_name: users
+              level: CAN_USE

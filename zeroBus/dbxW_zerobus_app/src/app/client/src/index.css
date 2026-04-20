@@ -1,82 +1,278 @@
 @import "@databricks/appkit-ui/styles.css";
 
-:root {
-  /* --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.603 0.135 166.892);
-  --success-foreground: oklch(1 0 0);
-  --warning: oklch(0.795 0.157 78.748);
-  --warning-foreground: oklch(0.199 0.027 238.732);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.705 0.015 286.067);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.21 0.006 285.885);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.705 0.015 286.067); */
+/* ── Databricks Brand Fonts ──────────────────────────────────────── */
+/* Source: .assistant/skills/databricks-brand-typography/SKILL.md     */
+/* Files:  /Shared/brandfolder/DM Sans/ and /Shared/brandfolder/DM Mono/ */
+
+/* DM Sans — Primary typeface (all UI text, headings, body, labels) */
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/dm-sans-regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/dm-sans-italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/dm-sans-medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/dm-sans-medium-italic.ttf') format('truetype');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/dm-sans-bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/dm-sans-bold-italic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* --background: oklch(0.141 0.005 285.823);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.21 0.006 285.885);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.21 0.006 285.885);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.92 0.004 286.32);
-    --primary-foreground: oklch(0.21 0.006 285.885);
-    --secondary: oklch(0.274 0.006 286.033);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.274 0.006 286.033);
-    --muted-foreground: oklch(0.705 0.015 286.067);
-    --accent: oklch(0.274 0.006 286.033);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --destructive-foreground: oklch(0.985 0 0);
-    --success: oklch(0.67 0.12 167);
-    --success-foreground: oklch(1 0 0);
-    --warning: oklch(0.83 0.165 85);
-    --warning-foreground: oklch(0.199 0.027 238.732);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.552 0.016 285.938);
-    --chart-1: oklch(0.488 0.243 264.376);
-    --chart-2: oklch(0.696 0.17 162.48);
-    --chart-3: oklch(0.769 0.188 70.08);
-    --chart-4: oklch(0.627 0.265 303.9);
-    --chart-5: oklch(0.645 0.246 16.439);
-    --sidebar: oklch(0.21 0.006 285.885);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.274 0.006 286.033);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.552 0.016 285.938); */
-  }
+/* DM Mono — Monospaced typeface (code blocks, terminals, inline code) */
+@font-face {
+  font-family: 'DM Mono';
+  src: url('/fonts/dm-mono-light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
 }
+@font-face {
+  font-family: 'DM Mono';
+  src: url('/fonts/dm-mono-light-italic.ttf') format('truetype');
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('/fonts/dm-mono-regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('/fonts/dm-mono-italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('/fonts/dm-mono-medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('/fonts/dm-mono-medium-italic.ttf') format('truetype');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* ── Databricks Official Brand Tokens ────────────────────────────── */
+/* Source: .assistant/skills/databricks-brand-colors/SKILL.md        */
+/* Extended Brand Guidelines — brandguides.brandfolder.com           */
+:root {
+  /* ── Typography tokens ────────────────────────────────── */
+  --font-sans: 'DM Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'DM Mono', 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+
+  /* ── Primary Brand Colors ─────────────────────────────── */
+  --dbx-lava-600:       #FF3621;  /* Primary accent */
+  --dbx-navy-800:       #1B3139;  /* Primary dark surface */
+  --dbx-oat-medium:     #EEEDE9;  /* Light surface */
+  --dbx-oat-light:      #F9F7F4;  /* Lightest surface */
+
+  /* ── Functional Grays ─────────────────────────────────── */
+  --dbx-gray-nav:       #303F47;  /* Navigation backgrounds */
+  --dbx-gray-text:      #5A6F77;  /* Body text, secondary labels */
+  --dbx-gray-lines:     #DCE0E2;  /* Dividers, borders, separators */
+
+  /* ── Extended Palette — Lava ──────────────────────────── */
+  --dbx-lava-800:       #801C17;
+  --dbx-lava-700:       #BD2B26;  /* Error / critical */
+  --dbx-lava-500:       #FF5F46;  /* Accent / hover */
+  --dbx-lava-400:       #FF9E94;
+  --dbx-lava-300:       #FABFBA;
+
+  /* ── Extended Palette — Navy ──────────────────────────── */
+  --dbx-navy-900:       #0B2026;  /* Deepest dark */
+  --dbx-navy-700:       #143D4A;  /* Dark card surface */
+  --dbx-navy-600:       #1B5162;
+  --dbx-navy-500:       #618794;
+  --dbx-navy-400:       #90A5B1;  /* Muted / disabled */
+  --dbx-navy-300:       #C4CCD6;
+
+  /* ── Extended Palette — Green ─────────────────────────── */
+  --dbx-green-800:      #095A35;
+  --dbx-green-700:      #00875C;
+  --dbx-green-600:      #00A972;  /* Success / healthy */
+  --dbx-green-500:      #42BA91;
+  --dbx-green-400:      #70C4AB;
+  --dbx-green-300:      #9ED6C4;
+
+  /* ── Extended Palette — Yellow ────────────────────────── */
+  --dbx-yellow-800:     #7D5319;
+  --dbx-yellow-700:     #BA7B23;
+  --dbx-yellow-600:     #FFAB00;  /* Warning / caution */
+  --dbx-yellow-500:     #FCBA33;
+  --dbx-yellow-400:     #FFCC66;
+  --dbx-yellow-300:     #FFDB96;
+
+  /* ── Extended Palette — Blue ──────────────────────────── */
+  --dbx-blue-800:       #04355D;
+  --dbx-blue-700:       #0E538B;
+  --dbx-blue-600:       #2272B4;  /* Info / links */
+  --dbx-blue-500:       #4299E0;
+  --dbx-blue-400:       #8ACAFF;
+  --dbx-blue-300:       #BAE1FC;
+
+  /* ── Extended Palette — Maroon ────────────────────────── */
+  --dbx-maroon-800:     #4A121A;
+  --dbx-maroon-700:     #730D21;
+  --dbx-maroon-600:     #98102A;
+  --dbx-maroon-500:     #AB4057;
+  --dbx-maroon-400:     #BF7080;
+  --dbx-maroon-300:     #D69EA8;
+
+  /* ── Semantic Tokens — Light Mode (default) ────────────── */
+  --radius: 0.625rem;
+  --background: #FFFFFF;
+  --foreground: var(--dbx-navy-800);
+  --card: #FFFFFF;
+  --card-foreground: var(--dbx-navy-800);
+  --primary: var(--dbx-lava-600);
+  --primary-foreground: #FFFFFF;
+  --secondary: var(--dbx-navy-800);
+  --secondary-foreground: #FFFFFF;
+  --muted: var(--dbx-oat-light);
+  --muted-foreground: var(--dbx-gray-text);
+  --accent: var(--dbx-lava-500);
+  --accent-foreground: #FFFFFF;
+  --destructive: var(--dbx-lava-700);
+  --destructive-foreground: #FFFFFF;
+  --success: var(--dbx-green-600);
+  --success-foreground: #FFFFFF;
+  --warning: var(--dbx-yellow-600);
+  --warning-foreground: var(--dbx-navy-800);
+  --info: var(--dbx-blue-600);
+  --info-foreground: #FFFFFF;
+  --border: var(--dbx-gray-lines);
+  --input: var(--dbx-gray-lines);
+  --ring: var(--dbx-lava-600);
+}
+
+/* ── Dark Mode — activated by .dark class on <html> ──────────────── */
+/* Controlled by ThemeProvider: respects OS preference by default,    */
+/* user can override via the theme toggle (persisted to localStorage) */
+:root.dark {
+  --background: var(--dbx-navy-900);
+  --foreground: var(--dbx-oat-light);
+  --card: var(--dbx-navy-700);
+  --card-foreground: var(--dbx-oat-light);
+  --primary: var(--dbx-lava-600);
+  --primary-foreground: #FFFFFF;
+  --secondary: var(--dbx-navy-600);
+  --secondary-foreground: var(--dbx-oat-light);
+  --muted: var(--dbx-navy-800);
+  --muted-foreground: var(--dbx-navy-400);
+  --accent: var(--dbx-lava-500);
+  --accent-foreground: #FFFFFF;
+  --destructive: var(--dbx-lava-700);
+  --destructive-foreground: #FFFFFF;
+  --success: var(--dbx-green-600);
+  --success-foreground: #FFFFFF;
+  --warning: var(--dbx-yellow-600);
+  --warning-foreground: var(--dbx-navy-900);
+  --info: var(--dbx-blue-400);
+  --info-foreground: var(--dbx-navy-900);
+  --border: rgba(255,255,255,0.1);
+  --input: rgba(255,255,255,0.15);
+  --ring: var(--dbx-lava-600);
+}
+
+/* ── Base resets & typography ─────────────────────────────────────── */
+/* Brand guide: 150% line-height for body, 120% for headlines        */
+* { box-sizing: border-box; }
+body {
+  font-family: var(--font-sans);
+  line-height: 1.5;           /* 150% — brand standard for body */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.2;           /* 120% — brand standard for headlines */
+}
+
+/* Monospace — code, pre, kbd, samp, inline code */
+code, pre, kbd, samp {
+  font-family: var(--font-mono);
+}
+
+/* ── Utility classes ─────────────────────────────────────────────── */
+.gradient-hero {
+  background: linear-gradient(135deg, var(--dbx-navy-800) 0%, var(--dbx-navy-900) 100%);
+}
+.gradient-red {
+  background: linear-gradient(135deg, var(--dbx-lava-600) 0%, var(--dbx-lava-500) 100%);
+}
+.glass-card {
+  background: rgba(255,255,255,0.07);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+/* ── Code blocks ──────────────────────────────────────────────────── */
+.code-block {
+  background: var(--dbx-navy-900);
+  color: #E5E7EB;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+.code-block .keyword { color: var(--dbx-lava-500); }
+.code-block .string { color: var(--dbx-green-600); }
+.code-block .comment { color: var(--dbx-gray-text); font-style: italic; }
+.code-block .header-name { color: var(--dbx-blue-500); }
+
+/* ── Status indicators ────────────────────────────────────────────── */
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,169,114,0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(0,169,114,0); }
+}
+.status-pulse {
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+/* ── Scrollbar styling ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--dbx-gray-lines); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--dbx-navy-300); }

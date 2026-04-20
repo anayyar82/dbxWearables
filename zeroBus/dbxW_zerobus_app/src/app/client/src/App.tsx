@@ -1,38 +1,80 @@
-import { createBrowserRouter, RouterProvider, NavLink, Outlet } from 'react-router';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@databricks/appkit-ui/react';
-import { LakebasePage } from './pages/lakebase/LakebasePage';
-
-const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-    isActive
-      ? 'bg-primary text-primary-foreground'
-      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-  }`;
+import { createBrowserRouter, RouterProvider, Outlet } from 'react-router';
+import { Navbar } from '@/components/Navbar';
+import { HomePage } from '@/pages/home/HomePage';
+import { HealthPage } from '@/pages/health/HealthPage';
+import { DocsPage } from '@/pages/docs/DocsPage';
+import { SecurityPage } from '@/pages/security/SecurityPage';
 
 function Layout() {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="border-b px-6 py-3 flex items-center gap-4">
-        <h1 className="text-lg font-semibold text-foreground">wearables-0bus-gateway</h1>
-        <nav className="flex gap-1">
-          <NavLink to="/" end className={navLinkClass}>
-            Home
-          </NavLink>
-          <NavLink to="/lakebase" className={navLinkClass}>
-            Lakebase
-          </NavLink>
-        </nav>
-      </header>
-
-      <main className="flex-1 p-6">
+    <div className="min-h-screen bg-[var(--background)] flex flex-col">
+      <Navbar />
+      <main className="flex-1">
         <Outlet />
       </main>
+      <Footer />
     </div>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="bg-[var(--dbx-navy-900)] text-gray-400 py-8 px-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          {/* Logo + branding */}
+          <div className="flex items-center gap-4">
+            <img
+              src="/images/databricks-symbol-light.svg"
+              alt="Databricks"
+              className="h-7 w-7 opacity-60"
+            />
+            <div>
+              <span className="text-white font-bold text-sm">dbxWearables</span>
+              <span className="text-gray-500 text-xs block">ZeroBus Health Data Gateway</span>
+            </div>
+          </div>
+
+          {/* Links */}
+          <div className="flex items-center gap-6 text-xs">
+            <a
+              href="https://docs.databricks.com/aws/en/ingestion/zerobus-overview/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              ZeroBus Docs
+            </a>
+            <a
+              href="https://databricks.github.io/appkit/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              AppKit Docs
+            </a>
+            <a
+              href="https://github.com/databricks/appkit"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              GitHub
+            </a>
+          </div>
+        </div>
+
+        {/* Bottom bar */}
+        <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between">
+          <span className="text-xs text-gray-500">Powered by</span>
+          <img
+            src="/images/primary-lockup-one-color-white-rgb.svg"
+            alt="Databricks"
+            className="h-4 opacity-40"
+          />
+        </div>
+      </div>
+    </footer>
   );
 }
 
@@ -41,57 +83,13 @@ const router = createBrowserRouter([
     element: <Layout />,
     children: [
       { path: '/', element: <HomePage /> },
-      { path: '/lakebase', element: <LakebasePage /> },
+      { path: '/status', element: <HealthPage /> },
+      { path: '/docs', element: <DocsPage /> },
+      { path: '/security', element: <SecurityPage /> },
     ],
   },
 ]);
 
 export default function App() {
   return <RouterProvider router={router} />;
-}
-
-function HomePage() {
-  return (
-    <div className="max-w-2xl mx-auto space-y-6 mt-8">
-      <div className="text-center">
-        <h2 className="text-3xl font-bold mb-2 text-foreground">
-          Welcome to your Databricks App
-        </h2>
-        <p className="text-lg text-muted-foreground">
-          Powered by Databricks AppKit
-        </p>
-      </div>
-
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle>Getting Started</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">Your app is ready. Explore the resources below to continue building.</p>
-          <ul className="space-y-2 text-sm">
-            <li>
-              <a
-                href="https://github.com/databricks/appkit"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary underline underline-offset-4 hover:text-primary/80"
-              >
-                AppKit on GitHub →
-              </a>
-            </li>
-            <li>
-              <a
-                href="https://databricks.github.io/appkit/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary underline underline-offset-4 hover:text-primary/80"
-              >
-                AppKit documentation →
-              </a>
-            </li>
-          </ul>
-        </CardContent>
-      </Card>
-    </div>
-  );
 }
