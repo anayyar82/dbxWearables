@@ -52,7 +52,7 @@ function HeroSection() {
           {/* Text */}
           <div className="flex-1 text-center lg:text-left">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 text-sm mb-6">
-              <Zap className="h-4 w-4 text-[var(--dbx-orange)]" />
+              <Zap className="h-4 w-4 text-[var(--dbx-lava-500)]" />
               Powered by Databricks AppKit &amp; ZeroBus
             </div>
 
@@ -169,7 +169,7 @@ function ArchitectureSection() {
       title: 'ZeroBus',
       subtitle: 'Stream Bridge',
       desc: 'Streams records into Unity Catalog bronze table with no external infrastructure. Decouples API from table writes.',
-      color: 'bg-[var(--dbx-orange)]',
+      color: 'bg-[var(--dbx-lava-500)]',
       image: '/images/databricks-symbol-color.svg',
     },
     {
@@ -177,7 +177,7 @@ function ArchitectureSection() {
       title: 'Unity Catalog',
       subtitle: 'Bronze Table',
       desc: 'Raw NDJSON stored as VARIANT column. Full HTTP headers preserved. Schema-on-read for maximum flexibility.',
-      color: 'bg-[var(--dbx-green)]',
+      color: 'bg-[var(--dbx-green-600)]',
       image: '/images/unity-catalog-lockup-no-db-full-color-white.svg',
     },
     {
@@ -284,7 +284,7 @@ function ZeroBusSection() {
                 'Schema-on-read with VARIANT column support',
               ].map((item, i) => (
                 <div key={i} className="flex items-start gap-3">
-                  <div className="mt-1 w-5 h-5 rounded-full bg-[var(--dbx-green)] flex items-center justify-center flex-shrink-0">
+                  <div className="mt-1 w-5 h-5 rounded-full bg-[var(--dbx-green-600)] flex items-center justify-center flex-shrink-0">
                     <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>

@@ -19,7 +19,7 @@ function Layout() {
 
 function Footer() {
   return (
-    <footer className="bg-[var(--dbx-navy)] text-gray-400 py-8 px-6">
+    <footer className="bg-[var(--dbx-navy-900)] text-gray-400 py-8 px-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           {/* Logo + branding */}

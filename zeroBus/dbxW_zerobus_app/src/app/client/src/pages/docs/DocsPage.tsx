@@ -29,7 +29,7 @@ export function DocsPage() {
           REST API reference for the dbxWearables ZeroBus Health Data Gateway.
         </p>
         <div className="flex items-center gap-4 mt-4 text-sm">
-          <span className="bg-[var(--dbx-green)]/10 text-[var(--dbx-green)] px-3 py-1 rounded-full font-medium">
+          <span className="bg-[var(--dbx-green-600)]/10 text-[var(--dbx-green-600)] px-3 py-1 rounded-full font-medium">
             v1.0
           </span>
           <span className="text-[var(--muted-foreground)]">
@@ -65,7 +65,7 @@ function IngestEndpoint() {
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-4 p-5 hover:bg-[var(--muted)]/50 transition-colors"
       >
-        <span className="px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider bg-[var(--dbx-green)] text-white">
+        <span className="px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider bg-[var(--dbx-green-600)] text-white">
           POST
         </span>
         <code className="text-sm font-mono font-bold text-[var(--foreground)] flex-1 text-left">
@@ -100,14 +100,14 @@ function IngestEndpoint() {
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
                   <tr>
-                    <td className="py-2.5 px-4 font-mono text-xs text-[var(--dbx-orange)]">Content-Type</td>
+                    <td className="py-2.5 px-4 font-mono text-xs text-[var(--dbx-lava-500)]">Content-Type</td>
                     <td className="py-2.5 px-4"><RequiredBadge /></td>
                     <td className="py-2.5 px-4 text-xs text-[var(--muted-foreground)]">
                       <code>application/x-ndjson</code>, <code>application/ndjson</code>, or <code>text/plain</code>
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-2.5 px-4 font-mono text-xs text-[var(--dbx-orange)]">X-Record-Type</td>
+                    <td className="py-2.5 px-4 font-mono text-xs text-[var(--dbx-lava-500)]">X-Record-Type</td>
                     <td className="py-2.5 px-4"><RequiredBadge /></td>
                     <td className="py-2.5 px-4 text-xs text-[var(--muted-foreground)]">
                       Any non-empty string identifying the payload type:
@@ -115,14 +115,14 @@ function IngestEndpoint() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-2.5 px-4 font-mono text-xs text-[var(--dbx-orange)]">X-Platform</td>
+                    <td className="py-2.5 px-4 font-mono text-xs text-[var(--dbx-lava-500)]">X-Platform</td>
                     <td className="py-2.5 px-4"><OptionalBadge /></td>
                     <td className="py-2.5 px-4 text-xs text-[var(--muted-foreground)]">
                       Source platform identifier (e.g., <code>ios</code>, <code>android</code>). Defaults to <code>unknown</code>.
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-2.5 px-4 font-mono text-xs text-[var(--dbx-orange)]">Authorization</td>
+                    <td className="py-2.5 px-4 font-mono text-xs text-[var(--dbx-lava-500)]">Authorization</td>
                     <td className="py-2.5 px-4"><OptionalBadge /></td>
                     <td className="py-2.5 px-4 text-xs text-[var(--muted-foreground)]">
                       <code>Bearer &lt;JWT&gt;</code> — Direct client auth. Token&apos;s <code>sub</code> claim becomes user_id.
@@ -167,7 +167,7 @@ function IngestEndpoint() {
           <div>
             <button
               onClick={() => setTryItOpen(!tryItOpen)}
-              className="flex items-center gap-2 text-sm font-medium text-[var(--dbx-red)] hover:text-[var(--dbx-orange)] transition-colors"
+              className="flex items-center gap-2 text-sm font-medium text-[var(--dbx-red)] hover:text-[var(--dbx-lava-500)] transition-colors"
             >
               <Send className="h-4 w-4" />
               Try it out
@@ -349,7 +349,7 @@ function TryItPanel() {
             <span className="text-xs font-medium text-[var(--muted-foreground)]">Response</span>
             <span className={`text-xs font-mono px-2 py-0.5 rounded ${
               status && status >= 200 && status < 300
-                ? 'bg-emerald-50 text-[var(--dbx-green)]'
+                ? 'bg-emerald-50 text-[var(--dbx-green-600)]'
                 : 'bg-red-50 text-red-600'
             }`}>
               {status}
@@ -387,7 +387,7 @@ function RecordTypesRef() {
               ['deletes', 'Deletion records', 'UUID + sample_type for soft-delete matching on backend'],
             ].map(([type, payload, desc]) => (
               <tr key={type} className="hover:bg-[var(--muted)]/50">
-                <td className="py-3 px-4 font-mono text-xs text-[var(--dbx-orange)] font-bold">{type}</td>
+                <td className="py-3 px-4 font-mono text-xs text-[var(--dbx-lava-500)] font-bold">{type}</td>
                 <td className="py-3 px-4 text-xs text-[var(--foreground)]">{payload}</td>
                 <td className="py-3 px-4 text-xs text-[var(--muted-foreground)]">{desc}</td>
               </tr>
@@ -470,7 +470,7 @@ function CodeBlock({ title, code }: { title: string; code: string }) {
           className="text-gray-400 hover:text-white transition-colors p-1"
           title="Copy to clipboard"
         >
-          {copied ? <Check className="h-3.5 w-3.5 text-[var(--dbx-green)]" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? <Check className="h-3.5 w-3.5 text-[var(--dbx-green-600)]" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       </div>
       <div className="code-block rounded-t-none">

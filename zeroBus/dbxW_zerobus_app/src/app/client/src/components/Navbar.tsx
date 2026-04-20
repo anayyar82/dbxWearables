@@ -5,6 +5,7 @@ import {
   Activity,
   Shield,
 } from 'lucide-react';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const navItems = [
   { to: '/', label: 'Overview', icon: Home, end: true },
@@ -16,7 +17,7 @@ const navItems = [
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
     isActive
-      ? 'bg-[var(--dbx-red)] text-white shadow-md shadow-[var(--dbx-red)]/25'
+      ? 'bg-[var(--dbx-lava-600)] text-white shadow-md shadow-[var(--dbx-lava-600)]/25'
       : 'text-gray-300 hover:text-white hover:bg-white/10'
   }`;
 
@@ -41,20 +42,25 @@ export function Navbar() {
           </div>
         </NavLink>
 
-        {/* Nav links */}
-        <nav className="flex gap-1">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={navLinkClass}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
+        {/* Nav links + Theme toggle */}
+        <div className="flex items-center gap-1">
+          <nav className="flex gap-1">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={navLinkClass}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+          <div className="ml-2 border-l border-white/20 pl-2">
+            <ThemeToggle />
+          </div>
+        </div>
       </div>
     </header>
   );

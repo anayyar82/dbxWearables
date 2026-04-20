@@ -47,7 +47,7 @@ function HeroSection() {
       </div>
       <div className="max-w-5xl mx-auto relative z-10">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 text-sm mb-6">
-          <Shield className="h-4 w-4 text-[var(--dbx-orange)]" />
+          <Shield className="h-4 w-4 text-[var(--dbx-lava-500)]" />
           App-Managed JWT Auth with Lakebase User Registry
         </div>
         <h1 className="text-4xl font-bold mb-3 tracking-tight">
@@ -109,7 +109,7 @@ function TwoLayerModel() {
       title: 'Service Principal Auth',
       mechanism: 'M2M OAuth client credentials',
       status: 'Active',
-      statusColor: 'text-[var(--dbx-green)] bg-emerald-50',
+      statusColor: 'text-[var(--dbx-green-600)] bg-emerald-50',
       desc: 'The Databricks App authenticates to the workspace using an auto-provisioned service principal. This SPN has access to ZeroBus, Unity Catalog, and the secret scope. It is the single identity writing to ZeroBus on behalf of all users.',
       details: [
         'M2M OAuth client credentials flow (DATABRICKS_CLIENT_ID / CLIENT_SECRET)',
@@ -132,7 +132,7 @@ function TwoLayerModel() {
         <div className="grid md:grid-cols-2 gap-6 mt-12">
           {layers.map((layer, i) => (
             <div key={i} className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden">
-              <div className="bg-[var(--dbx-dark-teal)] p-5 text-white">
+              <div className="bg-[var(--dbx-navy-800)] p-5 text-white">
                 <div className="flex items-center gap-3 mb-2">
                   <layer.icon className="h-6 w-6" />
                   <span className="text-xs font-mono text-gray-400">{layer.direction}</span>
@@ -148,7 +148,7 @@ function TwoLayerModel() {
                 <ul className="space-y-2">
                   {layer.details.map((d, j) => (
                     <li key={j} className="flex items-start gap-2 text-xs text-[var(--foreground)]">
-                      <div className="mt-1 w-4 h-4 rounded-full bg-[var(--dbx-green)] flex items-center justify-center flex-shrink-0">
+                      <div className="mt-1 w-4 h-4 rounded-full bg-[var(--dbx-green-600)] flex items-center justify-center flex-shrink-0">
                         <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
@@ -163,16 +163,16 @@ function TwoLayerModel() {
         </div>
 
         {/* Why this approach */}
-        <div className="mt-8 bg-[var(--dbx-dark-teal)] rounded-xl p-6 text-white">
+        <div className="mt-8 bg-[var(--dbx-navy-800)] rounded-xl p-6 text-white">
           <h4 className="font-bold mb-3 flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-[var(--dbx-orange)]" />
+            <AlertTriangle className="h-5 w-5 text-[var(--dbx-lava-500)]" />
             Why Not Databricks-Native User Auth?
           </h4>
           <p className="text-gray-300 text-sm leading-relaxed">
             Onboarding each mobile app user as a Databricks workspace identity is not possible.
             This rules out Databricks OIDC, per-user service principals, and OAuth2 public client (PKCE) flows.
             Instead, the app manages its own user registry in Lakebase and issues JWTs that carry the user identity
-            into the data layer via the validated <code className="text-[var(--dbx-orange)] bg-white/10 px-1.5 py-0.5 rounded text-xs">sub</code> claim.
+            into the data layer via the validated <code className="text-[var(--dbx-lava-500)] bg-white/10 px-1.5 py-0.5 rounded text-xs">sub</code> claim.
           </p>
         </div>
       </div>
@@ -275,7 +275,7 @@ function TokenLifecycle() {
           {tokens.map((t, i) => (
             <div key={i} className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 hover:shadow-md transition-shadow">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-[var(--dbx-dark-teal)] flex items-center justify-center">
+                <div className="w-10 h-10 rounded-lg bg-[var(--dbx-navy-800)] flex items-center justify-center">
                   <t.icon className="h-5 w-5 text-white" />
                 </div>
                 <div>
@@ -342,7 +342,7 @@ function IdentityExtraction() {
       source: 'Workspace traffic',
       desc: 'Injected by AppKit\'s reverse proxy after OAuth validation. Used for requests from Databricks notebooks, jobs, or services. Cannot be spoofed — the proxy strips client-supplied forwarded headers before injecting its own.',
       status: 'Active',
-      statusColor: 'text-[var(--dbx-green)] bg-emerald-50',
+      statusColor: 'text-[var(--dbx-green-600)] bg-emerald-50',
     },
     {
       priority: '3',
@@ -350,7 +350,7 @@ function IdentityExtraction() {
       source: 'No auth context',
       desc: 'When no authentication context is available — pre-auth clients, health checks, or development/testing. Records are still ingested but tagged with user_id = "anonymous".',
       status: 'Active',
-      statusColor: 'text-[var(--dbx-green)] bg-emerald-50',
+      statusColor: 'text-[var(--dbx-green-600)] bg-emerald-50',
     },
   ];
 
@@ -365,7 +365,7 @@ function IdentityExtraction() {
         <div className="space-y-4 mt-12">
           {methods.map((m) => (
             <div key={m.priority} className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 flex gap-5 items-start hover:shadow-md transition-shadow">
-              <div className="w-10 h-10 rounded-full bg-[var(--dbx-dark-teal)] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+              <div className="w-10 h-10 rounded-full bg-[var(--dbx-navy-800)] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                 {m.priority}
               </div>
               <div className="flex-1">
@@ -448,7 +448,7 @@ function TableCard({
 }) {
   return (
     <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden">
-      <div className="bg-[var(--dbx-dark-teal)] p-4 text-white flex items-center gap-3">
+      <div className="bg-[var(--dbx-navy-800)] p-4 text-white flex items-center gap-3">
         <Icon className="h-5 w-5" />
         <code className="font-bold">{name}</code>
       </div>
@@ -459,7 +459,7 @@ function TableCard({
             <div key={col.name} className="flex items-center justify-between text-xs bg-[var(--muted)] rounded px-2.5 py-1.5">
               <code className="font-medium text-[var(--foreground)]">{col.name}</code>
               <div className="flex items-center gap-2">
-                <span className="text-[var(--dbx-orange)] font-mono">{col.type}</span>
+                <span className="text-[var(--dbx-lava-500)] font-mono">{col.type}</span>
                 {col.note && <span className="text-[var(--muted-foreground)]">{col.note}</span>}
               </div>
             </div>
@@ -478,7 +478,7 @@ function AuthEndpoints() {
     {
       method: 'POST',
       path: '/api/v1/auth/apple',
-      badge: 'bg-[var(--dbx-green)]',
+      badge: 'bg-[var(--dbx-green-600)]',
       summary: 'Exchange Apple identity token for app JWT',
       auth: 'Public (no JWT required)',
       request: `{
@@ -618,7 +618,7 @@ function BronzeIdentity() {
           </div>
           <div>
             <h4 className="font-bold text-[var(--foreground)] mb-3 flex items-center gap-2">
-              <UserCheck className="h-5 w-5 text-[var(--dbx-green)]" />
+              <UserCheck className="h-5 w-5 text-[var(--dbx-green-600)]" />
               After (With JWT Auth)
             </h4>
             <TraceTable rows={after} highlight />
@@ -654,7 +654,7 @@ function TraceTable({ rows, highlight }: { rows: { trace: string; location: stri
             return (
               <tr key={i} className={isLast && highlight ? 'bg-emerald-50' : ''}>
                 <td className={`py-2 px-3 font-medium ${isLast ? 'text-[var(--foreground)] font-bold' : 'text-[var(--foreground)]'}`}>{r.trace}</td>
-                <td className="py-2 px-3 font-mono text-[var(--dbx-orange)]">{r.location}</td>
+                <td className="py-2 px-3 font-mono text-[var(--dbx-lava-500)]">{r.location}</td>
                 <td className="py-2 px-3 text-[var(--muted-foreground)]">{r.identifies}</td>
               </tr>
             );

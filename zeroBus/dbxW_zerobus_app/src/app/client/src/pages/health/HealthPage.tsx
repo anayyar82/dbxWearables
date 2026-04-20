@@ -107,7 +107,7 @@ function OverallBanner({
     ok: {
       bg: 'bg-emerald-50 border-emerald-200',
       icon: CheckCircle2,
-      iconColor: 'text-[var(--dbx-green)]',
+      iconColor: 'text-[var(--dbx-green-600)]',
       text: 'All Systems Operational',
       pulse: 'status-pulse',
     },
@@ -146,7 +146,7 @@ function OverallBanner({
   return (
     <div className={`${config.bg} border rounded-xl p-5 flex items-center justify-between`}>
       <div className="flex items-center gap-4">
-        <div className={`w-4 h-4 rounded-full ${status === 'ok' ? 'bg-[var(--dbx-green)]' : status === 'error' ? 'bg-red-500' : status === 'warning' ? 'bg-amber-500' : 'bg-blue-400'} ${config.pulse}`} />
+        <div className={`w-4 h-4 rounded-full ${status === 'ok' ? 'bg-[var(--dbx-green-600)]' : status === 'error' ? 'bg-red-500' : status === 'warning' ? 'bg-amber-500' : 'bg-blue-400'} ${config.pulse}`} />
         <Icon className={`h-6 w-6 ${config.iconColor}`} />
         <span className="font-bold text-[var(--foreground)] text-lg">{config.text}</span>
       </div>
@@ -163,7 +163,7 @@ function OverallBanner({
 /* ── Individual health check card ─────────────────────────────────── */
 function HealthCheckCard({ check }: { check: HealthCheck }) {
   const statusConfig = {
-    ok: { icon: CheckCircle2, color: 'text-[var(--dbx-green)]', badge: 'bg-emerald-50 text-[var(--dbx-green)]', label: 'Healthy' },
+    ok: { icon: CheckCircle2, color: 'text-[var(--dbx-green-600)]', badge: 'bg-emerald-50 text-[var(--dbx-green-600)]', label: 'Healthy' },
     warning: { icon: AlertTriangle, color: 'text-amber-500', badge: 'bg-amber-50 text-amber-600', label: 'Warning' },
     error: { icon: XCircle, color: 'text-red-500', badge: 'bg-red-50 text-red-600', label: 'Error' },
     loading: { icon: RefreshCw, color: 'text-blue-500 animate-spin', badge: 'bg-blue-50 text-blue-500', label: 'Checking' },
@@ -176,7 +176,7 @@ function HealthCheckCard({ check }: { check: HealthCheck }) {
   return (
     <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 flex items-start gap-5 hover:shadow-md transition-shadow">
       {/* Component icon */}
-      <div className="w-12 h-12 rounded-xl bg-[var(--dbx-dark-teal)] flex items-center justify-center flex-shrink-0">
+      <div className="w-12 h-12 rounded-xl bg-[var(--dbx-navy-800)] flex items-center justify-center flex-shrink-0">
         <CheckIcon className="h-6 w-6 text-white" />
       </div>
 
@@ -220,7 +220,7 @@ function HealthCheckCard({ check }: { check: HealthCheck }) {
 /* ── Environment info section ─────────────────────────────────────── */
 function EnvInfoSection() {
   return (
-    <div className="mt-12 bg-[var(--dbx-dark-teal)] rounded-xl p-6 text-white">
+    <div className="mt-12 bg-[var(--dbx-navy-800)] rounded-xl p-6 text-white">
       <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
         <img src="/images/databricks-symbol-light.svg" alt="" className="h-5 w-5" />
         Environment Configuration
