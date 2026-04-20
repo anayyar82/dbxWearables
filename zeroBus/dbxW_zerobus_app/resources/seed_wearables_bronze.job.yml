@@ -1,0 +1,48 @@
+# Serverless job: seed Unity Catalog bronze with Apple HealthKit–shaped demo rows.
+# Notebook: src/notebooks/seed_wearables_bronze_demo.ipynb
+
+resources:
+  jobs:
+    seed_wearables_bronze_serverless:
+      name: dbxWearables — Seed wearables bronze (serverless)
+
+      description: >
+        Runs the seed notebook on serverless compute to INSERT demo rows into
+        wearables_zerobus (VARIANT bronze). Uses job parameters as notebook widgets.
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: payload_size
+          default: demo
+        - name: seed_mode
+          default: append
+        - name: user_id
+          default: ""
+
+      tasks:
+        - task_key: seed_bronze
+          environment_key: default
+          notebook_task:
+            notebook_path: ../src/notebooks/seed_wearables_bronze_demo.ipynb
+            source: WORKSPACE
+            base_parameters:
+              catalog: "{{parameters.catalog}}"
+              schema: "{{parameters.schema}}"
+              payload_size: "{{parameters.payload_size}}"
+              seed_mode: "{{parameters.seed_mode}}"
+              user_id: "{{parameters.user_id}}"
+
+      environments:
+        - environment_key: default
+          spec:
+            client: "1"
+
+      max_concurrent_runs: 1
+      timeout_seconds: 1800
+
+      tags:
+        component: seed
+        workload: wearables_bronze

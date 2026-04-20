@@ -44,7 +44,7 @@ include:
 # CONVENTION — secret scope key names:
 #   The `client_id_dbs_key` and `client_secret_dbs_key` variables control
 #   the key names used inside the shared secret scope. Targets override
-#   these to schema-qualified names (e.g. client_id_wearables) so that
+#   these to schema-qualified names (e.g. client_id_ankur_nayyar) so that
 #   multiple schemas can share a single scope without key collisions.
 #
 #   These variables are passed to the UC setup job as parameters and used
@@ -93,7 +93,7 @@ variables:
     default: Healthcare and Life Sciences
     description: Business unit tag for cost and ROI allocation.
   tags_developer:
-    default: matthew.giglia@databricks.com
+    default: ankur.nayyar@databricks.com
     description: Primary developer contact for Ops.
   tags_requestedBy:
     default: Healthcare Providers and Health Plans
@@ -123,14 +123,15 @@ targets:
         RemoveAfter: ${var.tags_RemoveAfter}
         env: ${bundle.target}
     workspace:
-      host: https://fevm-hls-fde.cloud.databricks.com
+      host: https://e2-demo-field-eng.cloud.databricks.com
+      profile: e2-demo-field-eng
       root_path: /Workspace/Users/${var.run_as_user}/.bundle/${bundle.name}/${bundle.target}
     variables:
-      catalog: hls_fde_dev
-      schema: wearables
-      run_as_user: matthew.giglia@databricks.com
-      client_id_dbs_key: client_id_dev_matthew_giglia_${var.schema}
-      client_secret_dbs_key: client_secret_dev_matthew_giglia_${var.schema}
+      catalog: users
+      schema: ankur_nayyar
+      run_as_user: ankur.nayyar@databricks.com
+      client_id_dbs_key: client_id_${var.schema}
+      client_secret_dbs_key: client_secret_${var.schema}
 
   # ── hls_fde (production — same workspace as dev) ────────────────────────
   hls_fde:
@@ -145,20 +146,21 @@ targets:
         RemoveAfter: ${var.tags_RemoveAfter}
         env: ${bundle.target}
     workspace:
-      host: https://fevm-hls-fde.cloud.databricks.com
+      host: https://e2-demo-field-eng.cloud.databricks.com
+      profile: e2-demo-field-eng
       root_path: /Workspace/.bundle/${bundle.name}/${bundle.target}
     # run_as:
     #   user_name: ${var.run_as_user}
     variables:
-      catalog: hls_fde
-      schema: wearables
+      catalog: users
+      schema: ankur_nayyar
       higher_level_service_principal: acf021b4-87c6-44ff-b3d7-45c59d63fe4d
       run_as_user: ${var.higher_level_service_principal}
       serverless_environment_version: "5"
       client_id_dbs_key: client_id_${var.schema}
       client_secret_dbs_key: client_secret_${var.schema}
     permissions:
-      - user_name: matthew.giglia@databricks.com
+      - user_name: ankur.nayyar@databricks.com
         level: CAN_MANAGE
       - group_name: users
         level: CAN_RUN
@@ -169,10 +171,11 @@ targets:
   prod:
     mode: production
     workspace:
-      host: https://fevm-hls-fde.cloud.databricks.com
-      # We always use /Users/matthew.giglia@databricks.com for all resources to make sure we only have a single copy.
-      root_path: /Users/matthew.giglia@databricks.com/.bundle/${bundle.name}/${bundle.target}
+      host: https://e2-demo-field-eng.cloud.databricks.com
+      profile: e2-demo-field-eng
+      # We always use /Users/ankur.nayyar@databricks.com for all resources to make sure we only have a single copy.
+      root_path: /Users/ankur.nayyar@databricks.com/.bundle/${bundle.name}/${bundle.target}
     run_as:
-      # This runs as matthew.giglia@databricks.com in production. We could also use a service principal here,
+      # This runs as ankur.nayyar@databricks.com in production. We could also use a service principal here,
       # see https://docs.databricks.com/dev-tools/bundles/permissions.html.
-      user_name: matthew.giglia@databricks.com
+      user_name: ankur.nayyar@databricks.com

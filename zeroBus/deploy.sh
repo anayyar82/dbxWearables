@@ -21,7 +21,7 @@
 #   Secret scope keys — all 5 must be present:
 #     Auto-provisioned:  {client_id_dbs_key}, workspace_url, zerobus_endpoint, target_table_name
 #     Admin-provisioned: {client_secret_dbs_key}
-#   Key names are schema-qualified in dev/hls_fde targets (e.g. client_id_wearables).
+#   Key names are schema-qualified in dev/hls_fde targets (e.g. client_id_ankur_nayyar).
 #   Bronze table — wearables_zerobus must exist in the target catalog.schema
 #   Lakebase project — informational; notes Data API status (optional, not required for AppKit)
 #
@@ -36,7 +36,7 @@ set -euo pipefail
 # --------------------------------------------------------------------------- #
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_BUNDLE="dbxW_zerobus_infra"
-APP_BUNDLE="dbxW_zerobus"
+APP_BUNDLE="dbxW_zerobus_app"
 
 # Infrastructure readiness — expected secret scope keys.
 # The client_id and client_secret key names are schema-qualified and resolved
@@ -414,7 +414,7 @@ verify_infra_readiness() {
 
   # ---- 1. Secret scope keys -----------------------------------------------
   local secrets_json
-  secrets_json=$(databricks secrets list-secrets --scope "${SCOPE_NAME}" --output json 2>&1) || {
+  secrets_json=$(databricks secrets list-secrets "${SCOPE_NAME}" --output json 2>&1) || {
     echo ""
     echo "  Secret scope '${SCOPE_NAME}' not found or not accessible."
     echo "  The UC setup job must run first to create the SPN and populate secrets:"
@@ -430,8 +430,16 @@ verify_infra_readiness() {
   present_keys=$(echo "${secrets_json}" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
-for s in data.get('secrets', []):
-    print(s.get('key', ''))
+if isinstance(data, list):
+    secrets = data
+elif isinstance(data, dict):
+    secrets = data.get('secrets', [])
+else:
+    secrets = []
+
+for s in secrets:
+    if isinstance(s, dict):
+        print(s.get('key', ''))
 " 2>/dev/null) || fail "Could not parse secrets list from scope '${SCOPE_NAME}'."
 
   local missing_auto=()

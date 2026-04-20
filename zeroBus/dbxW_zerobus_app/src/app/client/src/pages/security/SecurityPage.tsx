@@ -622,7 +622,7 @@ function BronzeIdentity() {
 
         {/* New column */}
         <div className="mt-8 code-block text-sm">
-          <pre>{`ALTER `}<span className="keyword">TABLE</span>{` hls_fde_dev.dev_matthew_giglia_wearables.wearables_zerobus
+          <pre>{`ALTER `}<span className="keyword">TABLE</span>{` users.ankur_nayyar.wearables_zerobus
 ADD COLUMNS (
   user_id `}<span className="keyword">STRING</span>{` `}<span className="comment">COMMENT 'App-authenticated user ID from validated JWT sub claim'</span>{`
 );`}</pre>

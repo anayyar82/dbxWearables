@@ -15,7 +15,7 @@
 //   ZEROBUS_CLIENT_ID     — ZeroBus SPN application_id (OAuth M2M)
 //   ZEROBUS_CLIENT_SECRET — ZeroBus SPN OAuth secret
 //
-// Table schema (hls_fde_dev.dev_matthew_giglia_wearables.wearables_zerobus):
+// Table schema (users.ankur_nayyar.wearables_zerobus):
 //   record_id       STRING  NOT NULL  — Server-generated GUID (PK)
 //   ingested_at     TIMESTAMP         — Epoch microseconds
 //   body            VARIANT           — Raw NDJSON line as JSON-encoded string
@@ -28,6 +28,7 @@
 //   https://docs.databricks.com/aws/en/ingestion/zerobus-ingest/
 
 import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 
 // ── Types matching the bronze table schema ───────────────────────────────
 
@@ -62,6 +63,74 @@ interface TokenCache {
 
 class ZeroBusService {
   private tokenCache: TokenCache | null = null;
+
+  private static readonly INSERT_RETRY_ATTEMPTS = 3;
+  private static readonly INSERT_RETRY_BACKOFF_MS = 1000;
+
+  private async ingestWithCurl(
+    insertUrl: string,
+    token: string,
+    recordsJson: string,
+  ): Promise<void> {
+    const args = [
+      '-sS',
+      '-X',
+      'POST',
+      insertUrl,
+      '-H',
+      `Authorization: Bearer ${token}`,
+      '-H',
+      'Content-Type: application/json',
+      '--data',
+      recordsJson,
+      '-w',
+      '\n%{http_code}',
+    ];
+
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('curl', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk.toString();
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString();
+      });
+
+      child.on('error', (err) => {
+        reject(new Error(`curl fallback process error: ${err.message}`));
+      });
+
+      child.on('close', (code) => {
+        if (code !== 0) {
+          reject(
+            new Error(
+              `curl fallback failed (exit ${code}): ${stderr || stdout || '(no output)'}`,
+            ),
+          );
+          return;
+        }
+
+        const lines = stdout.trimEnd().split('\n');
+        const statusText = lines[lines.length - 1] || '';
+        const statusCode = Number.parseInt(statusText, 10);
+        const body = lines.slice(0, -1).join('\n');
+
+        if (!Number.isFinite(statusCode) || statusCode < 200 || statusCode >= 300) {
+          reject(
+            new Error(
+              `curl fallback insert failed (${statusCode || 'unknown'}): ${body || stderr || '(empty body)'}`,
+            ),
+          );
+          return;
+        }
+
+        resolve();
+      });
+    });
+  }
 
   // ── Table name parsing ───────────────────────────────────────────────
 
@@ -250,24 +319,75 @@ class ZeroBusService {
     const targetTable = process.env.ZEROBUS_TARGET_TABLE!;
 
     const insertUrl = `${endpoint}/zerobus/v1/tables/${targetTable}/insert`;
+    let lastError: unknown = null;
+    const recordsJson = JSON.stringify(records);
 
-    const response = await fetch(insertUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(records),
-    });
+    for (let attempt = 1; attempt <= ZeroBusService.INSERT_RETRY_ATTEMPTS; attempt++) {
+      try {
+        const response = await fetch(insertUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: recordsJson,
+        });
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(
-        `ZeroBus insert failed (${response.status}): ${text}`,
-      );
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`ZeroBus insert failed (${response.status}): ${text}`);
+        }
+
+        return records.length;
+      } catch (err) {
+        lastError = err;
+
+        const errorMessage = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+        const errorCause =
+          err &&
+          typeof err === 'object' &&
+          'cause' in err &&
+          (err as { cause?: unknown }).cause
+            ? ` | cause: ${String((err as { cause: unknown }).cause)}`
+            : '';
+
+        if (attempt < ZeroBusService.INSERT_RETRY_ATTEMPTS) {
+          console.warn(
+            `[ZeroBus] Insert attempt ${attempt}/${ZeroBusService.INSERT_RETRY_ATTEMPTS} failed, retrying in ${ZeroBusService.INSERT_RETRY_BACKOFF_MS}ms (${errorMessage}${errorCause})`,
+          );
+          await new Promise((resolve) =>
+            setTimeout(resolve, ZeroBusService.INSERT_RETRY_BACKOFF_MS * attempt),
+          );
+          continue;
+        }
+      }
     }
 
-    return records.length;
+    const finalMessage =
+      lastError instanceof Error ? `${lastError.name}: ${lastError.message}` : String(lastError);
+    const finalCause =
+      lastError &&
+      typeof lastError === 'object' &&
+      'cause' in lastError &&
+      (lastError as { cause?: unknown }).cause
+        ? ` | cause: ${String((lastError as { cause: unknown }).cause)}`
+        : '';
+
+    console.warn(
+      `[ZeroBus] fetch-based insert failed after ${ZeroBusService.INSERT_RETRY_ATTEMPTS} attempts, trying curl fallback`,
+    );
+
+    try {
+      await this.ingestWithCurl(insertUrl, token, recordsJson);
+      console.log('[ZeroBus] curl fallback insert succeeded');
+      return records.length;
+    } catch (curlErr) {
+      const curlMessage =
+        curlErr instanceof Error ? `${curlErr.name}: ${curlErr.message}` : String(curlErr);
+      throw new Error(
+        `ZeroBus insert failed after fetch retries and curl fallback to ${insertUrl}: ${finalMessage}${finalCause} | curl: ${curlMessage}`,
+      );
+    }
   }
 
   // ── Health check ─────────────────────────────────────────────────────

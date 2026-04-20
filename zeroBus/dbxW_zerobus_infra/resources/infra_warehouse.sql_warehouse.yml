@@ -27,7 +27,7 @@ resources:
       max_num_clusters: 1
 
       permissions:
-        - user_name: matthew.giglia@databricks.com
+        - user_name: ankur.nayyar@databricks.com
           level: CAN_MANAGE
 
 # Target-specific overrides
@@ -38,7 +38,7 @@ targets:
       sql_warehouses:
         infra_warehouse:
           permissions:
-            - user_name: matthew.giglia@databricks.com
+            - user_name: ankur.nayyar@databricks.com
               level: CAN_MANAGE
             - service_principal_name: ${var.higher_level_service_principal}
               level: CAN_MANAGE
@@ -50,5 +50,5 @@ targets:
       sql_warehouses:
         infra_warehouse:
           permissions:
-            - user_name: matthew.giglia@databricks.com
+            - user_name: ankur.nayyar@databricks.com
               level: CAN_MANAGE

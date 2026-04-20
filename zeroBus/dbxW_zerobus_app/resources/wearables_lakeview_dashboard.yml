@@ -1,0 +1,13 @@
+# AI/BI (Lakeview) dashboard deployed with the bundle.
+# Requires a Pro SQL warehouse ID (set var.sql_warehouse_id per workspace).
+
+resources:
+  dashboards:
+    wearables_bronze_overview:
+      display_name: dbxWearables — Bronze ingest overview
+      file_path: ../src/dashboards/wearables_demo.lvdash.json
+      warehouse_id: ${var.sql_warehouse_id}
+      dataset_catalog: ${var.catalog}
+      dataset_schema: ${var.schema}
+      parent_path: /Shared
+      embed_credentials: ${var.dashboard_embed_credentials}

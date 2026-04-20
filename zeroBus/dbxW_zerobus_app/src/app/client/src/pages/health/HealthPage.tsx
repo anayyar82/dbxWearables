@@ -338,7 +338,7 @@ async function runSingleCheck(check: HealthCheck): Promise<HealthCheck> {
 
       case 'lakebase': {
         // Try the lakebase todo endpoint as a connectivity check
-        const res = await fetch('/api/todos', { signal: AbortSignal.timeout(10000) });
+        const res = await fetch('/api/lakebase/todos', { signal: AbortSignal.timeout(10000) });
         const latencyMs = Math.round(performance.now() - start);
         if (res.ok) {
           return {

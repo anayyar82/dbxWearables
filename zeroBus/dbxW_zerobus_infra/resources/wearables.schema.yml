@@ -17,72 +17,11 @@
 # dynamically by the DDL notebook (target-table-ddl), not declared here.
 # Only admin, deploy SP, and user group grants are declared below.
 
-resources:
-  schemas:
-    wearables_schema:
-      name: ${var.schema}
-      catalog_name: ${var.catalog}
-      comment: >
-        Wearable and health-app data ingested via Databricks ZeroBus.
-        Houses bronze (raw), silver (cleaned), and gold (aggregated) tables
-        for Apple HealthKit and other wearable sources.
-
-      # Prevent accidental deletion — this schema holds all wearable data
-      lifecycle:
-        prevent_destroy: true
-
-      # Base grants — extended per-target below
-      grants:
-        - principal: account users
-          privileges:
-            - USE_SCHEMA
-
-# ---------------------------------------------------------------------------
-# Target-specific grants
-# (ZeroBus SPN grants are handled by the DDL notebook)
-# ---------------------------------------------------------------------------
-targets:
-
-  dev:
-    resources:
-      schemas:
-        wearables_schema:
-          grants:
-            - principal: account users
-              privileges:
-                - USE_SCHEMA
-            - principal: ${var.run_as_user}
-              privileges:
-                - ALL_PRIVILEGES
-
-  hls_fde:
-    resources:
-      schemas:
-        wearables_schema:
-          grants:
-            # Deploy service principal — full control
-            - principal: ${var.higher_level_service_principal}
-              privileges:
-                - ALL_PRIVILEGES
-            # Admin user
-            - principal: matthew.giglia@databricks.com
-              privileges:
-                - ALL_PRIVILEGES
-            # Read access for all workspace users
-            - principal: account users
-              privileges:
-                - USE_SCHEMA
-                - SELECT
-
-  prod:
-    resources:
-      schemas:
-        wearables_schema:
-          grants:
-            - principal: matthew.giglia@databricks.com
-              privileges:
-                - ALL_PRIVILEGES
-            - principal: account users
-              privileges:
-                - USE_SCHEMA
-                - SELECT
+# Schema resource intentionally disabled.
+#
+# Reason:
+# - The `users` catalog in this workspace is already at schema quota.
+# - `users.ankur_nayyar` already exists and is reused by the setup job.
+#
+# Catalog and schema values are provided via bundle variables (`var.catalog`,
+# `var.schema`) and consumed by `resources/uc_setup.job.yml`.

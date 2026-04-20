@@ -1,0 +1,101 @@
+{
+  "datasets": [
+    {
+      "name": "a9f3e2d1",
+      "displayName": "bronze_ingest_by_day",
+      "query": "SELECT to_date(ingested_at) AS ingest_day, record_type, COUNT(*) AS row_count FROM users.ankur_nayyar.wearables_zerobus WHERE ingested_at >= current_timestamp() - INTERVAL 60 DAY GROUP BY 1, 2 ORDER BY 1 DESC, 3 DESC",
+      "parameters": []
+    },
+    {
+      "name": "b8c7d6e5",
+      "displayName": "bronze_total_rows",
+      "query": "SELECT COUNT(*) AS row_count FROM users.ankur_nayyar.wearables_zerobus",
+      "parameters": []
+    }
+  ],
+  "pages": [
+    {
+      "name": "page_overview",
+      "displayName": "Wearables — Bronze overview",
+      "layout": [
+        {
+          "widget": {
+            "name": "w_counter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "b8c7d6e5",
+                  "fields": [{ "name": "row_count", "expression": "`row_count`" }],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": { "fieldName": "row_count", "displayName": "Rows in bronze" }
+              },
+              "frame": { "showTitle": true, "title": "wearables_zerobus" }
+            }
+          },
+          "position": { "x": 0, "y": 0, "width": 3, "height": 2 }
+        },
+        {
+          "widget": {
+            "name": "w_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "a9f3e2d1",
+                  "fields": [
+                    { "name": "ingest_day", "expression": "`ingest_day`" },
+                    { "name": "record_type", "expression": "`record_type`" },
+                    { "name": "row_count", "expression": "`row_count`" }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "ingest_day",
+                    "type": "date",
+                    "displayAs": "datetime",
+                    "visible": true,
+                    "order": 100000,
+                    "title": "Day"
+                  },
+                  {
+                    "fieldName": "record_type",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "record_type"
+                  },
+                  {
+                    "fieldName": "row_count",
+                    "type": "integer",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100002,
+                    "title": "rows"
+                  }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Ingest volume (60 days)" }
+            }
+          },
+          "position": { "x": 0, "y": 2, "width": 6, "height": 6 }
+        }
+      ]
+    }
+  ]
+}

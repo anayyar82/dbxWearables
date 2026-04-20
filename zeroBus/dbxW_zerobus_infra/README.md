@@ -42,7 +42,7 @@ The SPN's `application_id` is passed from task 1 to task 2 via a Databricks **ta
 
 ### Secret Scope Contents
 
-The `dbxw_zerobus_credentials` scope contains two categories of secrets. The client ID and client secret key names are **schema-qualified** in dev and hls_fde targets (e.g. `client_id_wearables`) so that multiple schemas can share a single scope without key collisions.
+The `dbxw_zerobus_credentials` scope contains two categories of secrets. The client ID and client secret key names are **schema-qualified** in dev and hls_fde targets (e.g. `client_id_ankur_nayyar`) so that multiple schemas can share a single scope without key collisions.
 
 **Auto-provisioned** (by the UC setup job — refreshed on every run):
 
@@ -63,8 +63,8 @@ The `dbxw_zerobus_credentials` scope contains two categories of secrets. The cli
 
 | Target | `client_id_dbs_key` | `client_secret_dbs_key` |
 | --- | --- | --- |
-| `dev` | `client_id_wearables` | `client_secret_wearables` |
-| `hls_fde` | `client_id_wearables` | `client_secret_wearables` |
+| `dev` | `client_id_ankur_nayyar` | `client_secret_ankur_nayyar` |
+| `hls_fde` | `client_id_ankur_nayyar` | `client_secret_ankur_nayyar` |
 | `prod` | `client_id` *(default)* | `client_secret` *(default)* |
 
 The actual key names are passed to the UC setup job as parameters (`client_id_dbs_key`, `client_secret_dbs_key`) and resolved from the bundle variables at deploy time. The companion `dbxW_zerobus_app` bundle declares matching variables with identical per-target values.
@@ -174,7 +174,7 @@ Infrastructure resources must be deployed **first**, before any dependent bundle
 7. dbxW_zerobus app bundle deploy             ← gated on hard checks passing
 ```
 
-Key names in `{braces}` are resolved from bundle variables at runtime. In dev/hls_fde targets, these resolve to `client_id_wearables` and `client_secret_wearables`.
+Key names in `{braces}` are resolved from bundle variables at runtime. In dev/hls_fde targets, these resolve to `client_id_ankur_nayyar` and `client_secret_ankur_nayyar`.
 
 ### What the readiness gate checks
 
@@ -203,9 +203,9 @@ The `deploy.sh` script resolves the actual key names from the infra bundle summa
 
 | Target | Mode | Workspace | Catalog | Default |
 | --- | --- | --- | --- | --- |
-| `dev` | development | `fevm-hls-fde.cloud.databricks.com` | `hls_fde_dev` | Yes |
-| `hls_fde` | production | `fevm-hls-fde.cloud.databricks.com` | `hls_fde` | No |
-| `prod` | production | `fevm-hls-fde.cloud.databricks.com` | (TBD) | No |
+| `dev` | development | `e2-demo-field-eng.cloud.databricks.com` | `users` | Yes |
+| `hls_fde` | production | `e2-demo-field-eng.cloud.databricks.com` | `users` | No |
+| `prod` | production | `e2-demo-field-eng.cloud.databricks.com` | `users` | No |
 
 ## Quick Start
 
@@ -256,8 +256,8 @@ databricks bundle run wearables_uc_setup --target dev
 #    Via CLI: databricks account service-principal-secrets create <sp_workspace_id>
 
 # 2. Store the secret in the scope under the schema-qualified key name.
-#    For dev/hls_fde targets, the key is client_secret_wearables:
-databricks secrets put-secret --scope dbxw_zerobus_credentials --key client_secret_wearables --string-value "<secret>"
+#    For dev/hls_fde targets, the key is client_secret_ankur_nayyar:
+databricks secrets put-secret --scope dbxw_zerobus_credentials --key client_secret_ankur_nayyar --string-value "<secret>"
 
 #    For the prod target (unqualified default):
 #    databricks secrets put-secret --scope dbxw_zerobus_credentials --key client_secret --string-value "<secret>"

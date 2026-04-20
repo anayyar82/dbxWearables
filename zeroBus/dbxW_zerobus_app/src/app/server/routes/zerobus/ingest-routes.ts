@@ -197,7 +197,7 @@ function extractNdjsonBody(req: Request): string {
  *    Workspace traffic (notebook, job, service). Injected by AppKit's
  *    reverse proxy after OAuth validation. Trustworthy — proxy strips
  *    any client-supplied x-forwarded-* headers before injecting its own.
- *    Value: user email (e.g. "matthew.giglia@databricks.com"), matches
+ *    Value: user email (e.g. "ankur.nayyar@databricks.com"), matches
  *    Spark SQL current_user().
  *
  * 3. Neither → 'anonymous'

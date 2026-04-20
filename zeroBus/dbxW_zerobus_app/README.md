@@ -144,8 +144,8 @@ All variables are declared in `databricks.yml` and assigned per-target. Variable
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `catalog` | *(per-target)* | Unity Catalog catalog — `hls_fde_dev` (dev), `hls_fde` (hls_fde) |
-| `schema` | *(per-target)* | Schema name — `wearables` across all targets |
+| `catalog` | *(per-target)* | Unity Catalog catalog — `users` |
+| `schema` | *(per-target)* | Schema name — `ankur_nayyar` |
 | `secret_scope_name` | `dbxw_zerobus_credentials` | Secret scope for ZeroBus OAuth credentials |
 | `client_id_dbs_key` | `client_id` | Key name for the M2M client ID in the secret scope |
 | `client_secret_dbs_key` | `client_secret` | Key name for the M2M client secret in the secret scope |
@@ -159,8 +159,8 @@ The `dev` and `hls_fde` targets override `client_id_dbs_key` and `client_secret_
 
 | Target | `client_id_dbs_key` | `client_secret_dbs_key` |
 | --- | --- | --- |
-| `dev` | `client_id_${var.schema}` → `client_id_wearables` | `client_secret_${var.schema}` → `client_secret_wearables` |
-| `hls_fde` | `client_id_${var.schema}` → `client_id_wearables` | `client_secret_${var.schema}` → `client_secret_wearables` |
+| `dev` | `client_id_${var.schema}` → `client_id_ankur_nayyar` | `client_secret_${var.schema}` → `client_secret_ankur_nayyar` |
+| `hls_fde` | `client_id_${var.schema}` → `client_id_ankur_nayyar` | `client_secret_${var.schema}` → `client_secret_ankur_nayyar` |
 | `prod` | `client_id` *(default)* | `client_secret` *(default)* |
 
 ### Lakebase Postgres
@@ -188,7 +188,7 @@ databricks postgres list-databases projects/dbxw-zerobus-wearables/branches/prod
 | --- | --- |
 | `tags_project` | `dbxWearables ZeroBus` |
 | `tags_businessUnit` | `Healthcare and Life Sciences` |
-| `tags_developer` | `matthew.giglia@databricks.com` |
+| `tags_developer` | `ankur.nayyar@databricks.com` |
 | `tags_requestedBy` | `Healthcare Providers and Health Plans` |
 | `tags_RemoveAfter` | `2027-03-04` |
 
@@ -196,9 +196,9 @@ databricks postgres list-databases projects/dbxw-zerobus-wearables/branches/prod
 
 | Target | Mode | Workspace | Catalog | Schema | Default |
 | --- | --- | --- | --- | --- | --- |
-| `dev` | development | `fevm-hls-fde.cloud.databricks.com` | `hls_fde_dev` | `wearables` | Yes |
-| `hls_fde` | production | `fevm-hls-fde.cloud.databricks.com` | `hls_fde` | `wearables` | No |
-| `prod` | production | `fevm-hls-fde.cloud.databricks.com` | *(TBD)* | *(TBD)* | No |
+| `dev` | development | `e2-demo-field-eng.cloud.databricks.com` | `users` | `ankur_nayyar` | Yes |
+| `hls_fde` | production | `e2-demo-field-eng.cloud.databricks.com` | `users` | `ankur_nayyar` | No |
+| `prod` | production | `e2-demo-field-eng.cloud.databricks.com` | `users` | `ankur_nayyar` | No |
 
 All three targets mirror the infra bundle's target definitions — same workspace hosts, root paths, presets, and permissions.
 

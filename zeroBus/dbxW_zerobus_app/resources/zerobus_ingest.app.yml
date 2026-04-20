@@ -38,7 +38,7 @@
 resources:
   apps:
     zerobus_ingest:
-      name: dbxw-0bus-ingest-${bundle.target}
+      name: zerobus-demo-ui
 
       description: >
         AppKit (Node.js + React) application for wearable health data
@@ -117,7 +117,7 @@ resources:
 
       # Base permissions — all workspace users can use the app
       permissions:
-        - user_name: matthew.giglia@databricks.com
+        - user_name: ankur.nayyar@databricks.com
           level: CAN_MANAGE
         - group_name: users
           level: CAN_USE
@@ -131,9 +131,9 @@ targets:
     resources:
       apps:
         zerobus_ingest:
-          name: ${bundle.target}-dbxw-0bus-ingest
+          name: zerobus-demo-ui
           permissions:
-            - user_name: matthew.giglia@databricks.com
+            - user_name: ankur.nayyar@databricks.com
               level: CAN_MANAGE
             - group_name: users
               level: CAN_USE
@@ -142,9 +142,9 @@ targets:
     resources:
       apps:
         zerobus_ingest:
-          name: ${bundle.target}-dbxw-0bus-ingest
+          name: zerobus-demo-ui
           permissions:
-            - user_name: matthew.giglia@databricks.com
+            - user_name: ankur.nayyar@databricks.com
               level: CAN_MANAGE
             - service_principal_name: ${var.higher_level_service_principal}
               level: CAN_MANAGE
@@ -156,7 +156,7 @@ targets:
       apps:
         zerobus_ingest:
           permissions:
-            - user_name: matthew.giglia@databricks.com
+            - user_name: ankur.nayyar@databricks.com
               level: CAN_MANAGE
             - group_name: users
               level: CAN_USE
