@@ -238,6 +238,12 @@ for proj_name, proj in pg_projects.items():
         if project_id:
             break
 
+# --- workspace.profile (for DATABRICKS_CONFIG_PROFILE on standalone CLI calls) ---
+workspace = data.get('workspace', {})
+ws_profile = ''
+if isinstance(workspace, dict):
+    ws_profile = workspace.get('profile', '') or ''
+
 # Sanitise for shell eval safety (strip anything not alphanumeric/underscore/dash/dot)
 import re
 def safe(v):
@@ -249,11 +255,19 @@ print(f'SCHEMA=\"{safe(schema)}\"')
 print(f'CLIENT_ID_DBS_KEY=\"{safe(client_id_key)}\"')
 print(f'CLIENT_SECRET_DBS_KEY=\"{safe(client_secret_key)}\"')
 print(f'LAKEBASE_PROJECT_ID=\"{safe(project_id)}\"')
+print(f'BUNDLE_WORKSPACE_PROFILE=\"{safe(ws_profile)}\"')
 " 2>/dev/null)" || fail "Could not parse bundle summary JSON."
 
   # Check for parse error forwarded from python
   if [[ -n "${RESOLVE_ERROR:-}" ]]; then
     fail "Bundle summary parse error: ${RESOLVE_ERROR}"
+  fi
+
+  if [[ -n "${BUNDLE_WORKSPACE_PROFILE:-}" ]]; then
+    export DATABRICKS_CONFIG_PROFILE="${BUNDLE_WORKSPACE_PROFILE}"
+    ok "CLI workspace profile: ${DATABRICKS_CONFIG_PROFILE}"
+  else
+    warn "No workspace profile in bundle summary; secrets/tables checks use the CLI default profile."
   fi
 
   [[ -n "${SCOPE_NAME}" ]]          || fail "Could not resolve secret_scope_name from bundle summary."

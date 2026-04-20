@@ -1,32 +1,85 @@
 {
   "datasets": [
     {
-      "name": "a9f3e2d1",
-      "displayName": "bronze_ingest_by_day",
-      "query": "SELECT to_date(ingested_at) AS ingest_day, record_type, COUNT(*) AS row_count FROM users.ankur_nayyar.wearables_zerobus WHERE ingested_at >= current_timestamp() - INTERVAL 60 DAY GROUP BY 1, 2 ORDER BY 1 DESC, 3 DESC",
+      "name": "d001",
+      "displayName": "kpi_gold_rowcounts",
+      "query": "\nSELECT 'activity_enriched_daily' AS entity, COUNT(*) AS c FROM users.ankur_nayyar.wearable_gold_activity_enriched_daily\nUNION ALL SELECT 'sleep_nightly', COUNT(*) FROM users.ankur_nayyar.wearable_gold_sleep_nightly\nUNION ALL SELECT 'weekly_workouts', COUNT(*) FROM users.ankur_nayyar.wearable_gold_weekly_workout_summary\nUNION ALL SELECT 'cardio_vitals_daily', COUNT(*) FROM users.ankur_nayyar.wearable_gold_cardio_vitals_daily\nUNION ALL SELECT 'hk_family_weekly', COUNT(*) FROM users.ankur_nayyar.wearable_gold_hk_family_weekly\n",
       "parameters": []
     },
     {
-      "name": "b8c7d6e5",
-      "displayName": "bronze_total_rows",
+      "name": "d002",
+      "displayName": "activity_move_trend",
+      "query": "\nSELECT day, user_id, move_ring_ratio, total_steps, exercise_ring_ratio, stand_ring_ratio\nFROM users.ankur_nayyar.wearable_vw_gold_activity_last_45d\nWHERE day >= current_date() - INTERVAL 45 DAY\nORDER BY day\n",
+      "parameters": []
+    },
+    {
+      "name": "d003",
+      "displayName": "sleep_stage_totals",
+      "query": "\nSELECT sleep_night, user_id, deep_sleep_min, rem_sleep_min, core_sleep_min, awake_min, total_tracked_min\nFROM users.ankur_nayyar.wearable_vw_gold_sleep_last_30_sessions\nORDER BY sleep_night DESC\n",
+      "parameters": []
+    },
+    {
+      "name": "d004",
+      "displayName": "workout_weekly_bars",
+      "query": "\nSELECT week_start, user_id, workout_count, total_duration_min, total_energy_kcal, total_distance_m / 1000.0 AS distance_km\nFROM users.ankur_nayyar.wearable_vw_gold_workouts_recent\nORDER BY week_start\n",
+      "parameters": []
+    },
+    {
+      "name": "d005",
+      "displayName": "vitals_hr_trend",
+      "query": "\nSELECT day, user_id, resting_hr_avg, heart_rate_avg, heart_rate_max, hrv_sdnn_avg, spo2_avg\nFROM users.ankur_nayyar.wearable_gold_cardio_vitals_daily\nWHERE day >= current_date() - INTERVAL 60 DAY\nORDER BY day\n",
+      "parameters": []
+    },
+    {
+      "name": "d006",
+      "displayName": "hk_family_weekly_lines",
+      "query": "\nSELECT week_start, user_id, metric_family,\n  concat(user_id, ' | ', metric_family) AS series_key,\n  avg_value, readings\nFROM users.ankur_nayyar.wearable_gold_hk_family_weekly\nWHERE week_start >= current_timestamp() - INTERVAL 84 DAY\nORDER BY week_start, metric_family\n",
+      "parameters": []
+    },
+    {
+      "name": "d007",
+      "displayName": "ingest_mix",
+      "query": "\nSELECT ingest_day, user_id, record_type, row_count\nFROM users.ankur_nayyar.wearable_gold_bronze_ingest_daily\nWHERE ingest_day >= current_date() - INTERVAL 60 DAY\nORDER BY ingest_day DESC, row_count DESC\n",
+      "parameters": []
+    },
+    {
+      "name": "d008",
+      "displayName": "daily_steps",
+      "query": "\nSELECT day, user_id, total_steps, sample_intervals\nFROM users.ankur_nayyar.wearable_gold_daily_steps\nWHERE day >= current_date() - INTERVAL 60 DAY\nORDER BY day\n",
+      "parameters": []
+    },
+    {
+      "name": "d009",
+      "displayName": "hk_quantity_daily_top",
+      "query": "\nSELECT day, user_id, regexp_replace(hk_type,'HKQuantityTypeIdentifier','') AS metric, avg_value, sample_rows\nFROM users.ankur_nayyar.wearable_hk_quantity_daily_gold\nWHERE day >= current_date() - INTERVAL 45 DAY\nORDER BY sample_rows DESC\nLIMIT 500\n",
+      "parameters": []
+    },
+    {
+      "name": "d010",
+      "displayName": "bronze_total",
       "query": "SELECT COUNT(*) AS row_count FROM users.ankur_nayyar.wearables_zerobus",
       "parameters": []
     }
   ],
   "pages": [
     {
-      "name": "page_overview",
-      "displayName": "Wearables — Bronze overview",
+      "name": "p_exec",
+      "displayName": "Gold \u2014 Executive",
       "layout": [
         {
           "widget": {
-            "name": "w_counter",
+            "name": "c1",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "b8c7d6e5",
-                  "fields": [{ "name": "row_count", "expression": "`row_count`" }],
+                  "datasetName": "d010",
+                  "fields": [
+                    {
+                      "name": "row_count",
+                      "expression": "`row_count`"
+                    }
+                  ],
                   "disaggregated": false
                 }
               }
@@ -35,25 +88,1028 @@
               "version": 2,
               "widgetType": "counter",
               "encodings": {
-                "value": { "fieldName": "row_count", "displayName": "Rows in bronze" }
+                "value": {
+                  "fieldName": "row_count",
+                  "displayName": "Bronze rows (all)"
+                }
               },
-              "frame": { "showTitle": true, "title": "wearables_zerobus" }
+              "frame": {
+                "showTitle": true,
+                "title": "Bronze rows (all)"
+              }
             }
           },
-          "position": { "x": 0, "y": 0, "width": 3, "height": 2 }
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          }
         },
         {
           "widget": {
-            "name": "w_table",
+            "name": "t_kpi_gold",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "a9f3e2d1",
+                  "datasetName": "d001",
                   "fields": [
-                    { "name": "ingest_day", "expression": "`ingest_day`" },
-                    { "name": "record_type", "expression": "`record_type`" },
-                    { "name": "row_count", "expression": "`row_count`" }
+                    {
+                      "name": "entity",
+                      "expression": "`entity`"
+                    },
+                    {
+                      "name": "c",
+                      "expression": "`c`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "entity",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100000,
+                    "title": "Gold table"
+                  },
+                  {
+                    "fieldName": "c",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "Rows"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Gold layer row counts"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 0,
+            "width": 4,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "l1",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d002",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "move_ring_ratio",
+                      "expression": "`move_ring_ratio`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "day",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "day"
+                },
+                "y": {
+                  "fieldName": "move_ring_ratio",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "move_ring_ratio"
+                },
+                "series": {
+                  "fieldName": "user_id",
+                  "displayName": "user"
+                },
+                "label": {
+                  "show": false
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Move ring ratio (45d)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 4,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "l2",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d002",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "total_steps",
+                      "expression": "`total_steps`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "day",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "day"
+                },
+                "y": {
+                  "fieldName": "total_steps",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "total_steps"
+                },
+                "series": {
+                  "fieldName": "user_id",
+                  "displayName": "user"
+                },
+                "label": {
+                  "show": false
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Daily steps"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 9,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "t1",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d009",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "metric",
+                      "expression": "`metric`"
+                    },
+                    {
+                      "name": "avg_value",
+                      "expression": "`avg_value`"
+                    },
+                    {
+                      "name": "sample_rows",
+                      "expression": "`sample_rows`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "day",
+                    "type": "date",
+                    "displayAs": "datetime",
+                    "visible": true,
+                    "order": 100000,
+                    "title": "day"
+                  },
+                  {
+                    "fieldName": "user_id",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "user_id"
+                  },
+                  {
+                    "fieldName": "metric",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100002,
+                    "title": "metric"
+                  },
+                  {
+                    "fieldName": "avg_value",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100003,
+                    "title": "avg_value"
+                  },
+                  {
+                    "fieldName": "sample_rows",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100004,
+                    "title": "sample_rows"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Top HK metrics (45d)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 14,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "p_work",
+      "displayName": "Gold \u2014 Workouts",
+      "layout": [
+        {
+          "widget": {
+            "name": "b1",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d004",
+                  "fields": [
+                    {
+                      "name": "week_start",
+                      "expression": "`week_start`"
+                    },
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "total_duration_min",
+                      "expression": "`total_duration_min`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "week_start",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "week_start"
+                },
+                "y": {
+                  "fieldName": "total_duration_min",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "total_duration_min"
+                },
+                "color": {
+                  "fieldName": "user_id",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "user"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Weekly workout minutes"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "l3",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d004",
+                  "fields": [
+                    {
+                      "name": "week_start",
+                      "expression": "`week_start`"
+                    },
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "total_energy_kcal",
+                      "expression": "`total_energy_kcal`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "week_start",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "week_start"
+                },
+                "y": {
+                  "fieldName": "total_energy_kcal",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "total_energy_kcal"
+                },
+                "series": {
+                  "fieldName": "user_id",
+                  "displayName": "user"
+                },
+                "label": {
+                  "show": false
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Weekly energy (kcal)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "t2",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d004",
+                  "fields": [
+                    {
+                      "name": "week_start",
+                      "expression": "`week_start`"
+                    },
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "workout_count",
+                      "expression": "`workout_count`"
+                    },
+                    {
+                      "name": "total_duration_min",
+                      "expression": "`total_duration_min`"
+                    },
+                    {
+                      "name": "total_energy_kcal",
+                      "expression": "`total_energy_kcal`"
+                    },
+                    {
+                      "name": "distance_km",
+                      "expression": "`distance_km`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "week_start",
+                    "type": "date",
+                    "displayAs": "datetime",
+                    "visible": true,
+                    "order": 100000,
+                    "title": "week_start"
+                  },
+                  {
+                    "fieldName": "user_id",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "user_id"
+                  },
+                  {
+                    "fieldName": "workout_count",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100002,
+                    "title": "workout_count"
+                  },
+                  {
+                    "fieldName": "total_duration_min",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100003,
+                    "title": "total_duration_min"
+                  },
+                  {
+                    "fieldName": "total_energy_kcal",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100004,
+                    "title": "total_energy_kcal"
+                  },
+                  {
+                    "fieldName": "distance_km",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100005,
+                    "title": "distance_km"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Weekly workout detail"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 10,
+            "width": 6,
+            "height": 7
+          }
+        }
+      ]
+    },
+    {
+      "name": "p_sleep",
+      "displayName": "Gold \u2014 Sleep & vitals",
+      "layout": [
+        {
+          "widget": {
+            "name": "l4",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d003",
+                  "fields": [
+                    {
+                      "name": "sleep_night",
+                      "expression": "`sleep_night`"
+                    },
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "deep_sleep_min",
+                      "expression": "`deep_sleep_min`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "sleep_night",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "sleep_night"
+                },
+                "y": {
+                  "fieldName": "deep_sleep_min",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "deep_sleep_min"
+                },
+                "series": {
+                  "fieldName": "user_id",
+                  "displayName": "user"
+                },
+                "label": {
+                  "show": false
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Deep sleep minutes"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "l5",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d003",
+                  "fields": [
+                    {
+                      "name": "sleep_night",
+                      "expression": "`sleep_night`"
+                    },
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "rem_sleep_min",
+                      "expression": "`rem_sleep_min`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "sleep_night",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "sleep_night"
+                },
+                "y": {
+                  "fieldName": "rem_sleep_min",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "rem_sleep_min"
+                },
+                "series": {
+                  "fieldName": "user_id",
+                  "displayName": "user"
+                },
+                "label": {
+                  "show": false
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "REM sleep minutes"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "l6",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d005",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "resting_hr_avg",
+                      "expression": "`resting_hr_avg`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "day",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "day"
+                },
+                "y": {
+                  "fieldName": "resting_hr_avg",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "resting_hr_avg"
+                },
+                "series": {
+                  "fieldName": "user_id",
+                  "displayName": "user"
+                },
+                "label": {
+                  "show": false
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Resting HR trend"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 10,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "l7",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d005",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "spo2_avg",
+                      "expression": "`spo2_avg`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "day",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "day"
+                },
+                "y": {
+                  "fieldName": "spo2_avg",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "spo2_avg"
+                },
+                "series": {
+                  "fieldName": "user_id",
+                  "displayName": "user"
+                },
+                "label": {
+                  "show": false
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "SpO2 trend"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 15,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "t3",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d003",
+                  "fields": [
+                    {
+                      "name": "sleep_night",
+                      "expression": "`sleep_night`"
+                    },
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "deep_sleep_min",
+                      "expression": "`deep_sleep_min`"
+                    },
+                    {
+                      "name": "rem_sleep_min",
+                      "expression": "`rem_sleep_min`"
+                    },
+                    {
+                      "name": "core_sleep_min",
+                      "expression": "`core_sleep_min`"
+                    },
+                    {
+                      "name": "awake_min",
+                      "expression": "`awake_min`"
+                    },
+                    {
+                      "name": "total_tracked_min",
+                      "expression": "`total_tracked_min`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "sleep_night",
+                    "type": "date",
+                    "displayAs": "datetime",
+                    "visible": true,
+                    "order": 100000,
+                    "title": "sleep_night"
+                  },
+                  {
+                    "fieldName": "user_id",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "user_id"
+                  },
+                  {
+                    "fieldName": "deep_sleep_min",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100002,
+                    "title": "deep_sleep_min"
+                  },
+                  {
+                    "fieldName": "rem_sleep_min",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100003,
+                    "title": "rem_sleep_min"
+                  },
+                  {
+                    "fieldName": "core_sleep_min",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100004,
+                    "title": "core_sleep_min"
+                  },
+                  {
+                    "fieldName": "awake_min",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100005,
+                    "title": "awake_min"
+                  },
+                  {
+                    "fieldName": "total_tracked_min",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100006,
+                    "title": "total_tracked_min"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Sleep nightly breakdown"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 20,
+            "width": 6,
+            "height": 8
+          }
+        }
+      ]
+    },
+    {
+      "name": "p_hk",
+      "displayName": "Gold \u2014 HK & pipeline",
+      "layout": [
+        {
+          "widget": {
+            "name": "l8",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d006",
+                  "fields": [
+                    {
+                      "name": "week_start",
+                      "expression": "`week_start`"
+                    },
+                    {
+                      "name": "series_key",
+                      "expression": "`series_key`"
+                    },
+                    {
+                      "name": "avg_value",
+                      "expression": "`avg_value`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "week_start",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "week_start"
+                },
+                "y": {
+                  "fieldName": "avg_value",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "avg_value"
+                },
+                "series": {
+                  "fieldName": "series_key",
+                  "displayName": "user | family"
+                },
+                "label": {
+                  "show": false
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "HK family weekly avg (by user)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "t4",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d007",
+                  "fields": [
+                    {
+                      "name": "ingest_day",
+                      "expression": "`ingest_day`"
+                    },
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "record_type",
+                      "expression": "`record_type`"
+                    },
+                    {
+                      "name": "row_count",
+                      "expression": "`row_count`"
+                    }
                   ],
                   "disaggregated": true
                 }
@@ -70,30 +1126,111 @@
                     "displayAs": "datetime",
                     "visible": true,
                     "order": 100000,
-                    "title": "Day"
+                    "title": "ingest_day"
+                  },
+                  {
+                    "fieldName": "user_id",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "user_id"
                   },
                   {
                     "fieldName": "record_type",
                     "type": "string",
                     "displayAs": "string",
                     "visible": true,
-                    "order": 100001,
+                    "order": 100002,
                     "title": "record_type"
                   },
                   {
                     "fieldName": "row_count",
-                    "type": "integer",
+                    "type": "float",
                     "displayAs": "number",
                     "visible": true,
-                    "order": 100002,
-                    "title": "rows"
+                    "order": 100003,
+                    "title": "row_count"
                   }
                 ]
               },
-              "frame": { "showTitle": true, "title": "Ingest volume (60 days)" }
+              "frame": {
+                "showTitle": true,
+                "title": "Bronze ingest mix (gold)"
+              }
             }
           },
-          "position": { "x": 0, "y": 2, "width": 6, "height": 6 }
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 8
+          }
+        },
+        {
+          "widget": {
+            "name": "l9",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d008",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "total_steps",
+                      "expression": "`total_steps`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "day",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "day"
+                },
+                "y": {
+                  "fieldName": "total_steps",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "total_steps"
+                },
+                "series": {
+                  "fieldName": "user_id",
+                  "displayName": "user"
+                },
+                "label": {
+                  "show": false
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Gold daily steps"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 14,
+            "width": 6,
+            "height": 6
+          }
         }
       ]
     }

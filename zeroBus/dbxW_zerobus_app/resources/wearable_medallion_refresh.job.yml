@@ -1,0 +1,19 @@
+# Triggers an update on the existing Lakeflow / SDP medallion pipeline (silver + gold).
+# Set var.wearable_medallion_pipeline_id per target in databricks.yml.
+
+resources:
+  jobs:
+    wearable_medallion_refresh:
+      name: "[${bundle.target}] dbxWearables — Refresh wearable medallion DLT"
+
+      tasks:
+        - task_key: refresh_medallion
+          pipeline_task:
+            pipeline_id: ${var.wearable_medallion_pipeline_id}
+
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+
+      tags:
+        component: medallion_refresh
+        workload: wearables_dlt
