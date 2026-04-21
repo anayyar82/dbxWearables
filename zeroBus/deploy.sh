@@ -76,7 +76,8 @@ usage() {
 Usage: $(basename "$0") --target <target> [OPTIONS]
 
 Options:
-  --target <name>    Required. Bundle target (dev, hls_fde, prod).
+  --target <name>    Required. Target name defined under targets: in BOTH bundle
+                     databricks.yml files (e.g. dev, hls_fde, prod, or your own).
   --infra            Deploy only the infrastructure bundle.
   --app              Deploy only the application bundle (skip infra).
   --run-setup        Run the UC setup job after deploying the infra bundle.

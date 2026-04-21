@@ -35,6 +35,8 @@ The [`dbxW_zerobus_infra`](../dbxW_zerobus_infra/README.md) bundle **must** be d
 
 The shared [`deploy.sh`](../deploy.sh) script enforces deployment order and runs readiness checks (all 5 secret scope keys + bronze table existence) before allowing this bundle to deploy.
 
+**New workspace or environment:** add a matching **`targets.<name>`** block in this file **and** in [`dbxW_zerobus_infra`](../dbxW_zerobus_infra/databricks.yml), then deploy with `./deploy.sh --target <name>`. Step-by-step checklist: [ZeroBus — Deploy to a new environment](../README.md#deploy-to-a-new-environment-step-by-step).
+
 ## AppKit Application
 
 The app is a **TypeScript/Node.js** project built with `@databricks/appkit` (Express + React + Vite). Source code lives in `src/app/` and is uploaded as the Databricks App source via `source_code_path: ../src/app` in the resource YAML.
@@ -205,6 +207,8 @@ databricks postgres list-databases projects/dbxw-zerobus-wearables/branches/prod
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `dashboard_embed_credentials` | `false` | Dashboard credential mode (`true` = owner, `false` = viewer) |
+| `sql_warehouse_id` | *(see `databricks.yml`)* | **Per-workspace** Pro SQL warehouse UUID for Lakeview + AppKit `analytics` plugin. After infra deploy, copy `infra_warehouse` id from the infra bundle summary — do not reuse another workspace’s id. |
+| `wearable_medallion_pipeline_id` | `""` until set | Workspace UUID of the `wearable_medallion` pipeline (Pipelines UI URL). Optional on first deploy; set and redeploy so `/dlt` and triggers resolve the pipeline without listing APIs. |
 
 ### Tags (applied to all resources via presets)
 
@@ -224,7 +228,7 @@ databricks postgres list-databases projects/dbxw-zerobus-wearables/branches/prod
 | `hls_fde` | production | `e2-demo-field-eng.cloud.databricks.com` | `users` | `ankur_nayyar` | No |
 | `prod` | production | `e2-demo-field-eng.cloud.databricks.com` | `users` | `ankur_nayyar` | No |
 
-All three targets mirror the infra bundle's target definitions — same workspace hosts, root paths, presets, and permissions.
+Shipped targets (`dev`, `hls_fde`, `prod`) mirror the infra bundle for the same names. **Adding another environment** means defining the same target name in both bundles’ `databricks.yml` files; see [ZeroBus — Deploy to a new environment](../README.md#deploy-to-a-new-environment-step-by-step).
 
 ## Development
 

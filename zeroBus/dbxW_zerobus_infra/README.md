@@ -207,6 +207,10 @@ The `deploy.sh` script resolves the actual key names from the infra bundle summa
 | `hls_fde` | production | `e2-demo-field-eng.cloud.databricks.com` | `users` | No |
 | `prod` | production | `e2-demo-field-eng.cloud.databricks.com` | `users` | No |
 
+## New workspace or environment
+
+To deploy into **another** workspace, catalog/schema, or logical environment: add a matching **`targets.<name>`** block in **this** `databricks.yml` and the same target name in [`dbxW_zerobus_app`](../dbxW_zerobus_app/databricks.yml), then use `./deploy.sh --target <name>` from [`zeroBus/`](../README.md). Full checklist (warehouse id, Lakebase paths, client secret order): [Deploy to a new environment (step-by-step)](../README.md#deploy-to-a-new-environment-step-by-step).
+
 ## Quick Start
 
 ### First deployment (recommended)
