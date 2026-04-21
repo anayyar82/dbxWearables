@@ -7,6 +7,11 @@
 #   PGHOST, PGPORT, PGDATABASE, PGUSER, PGSSLMODE — from postgres resource
 #   DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET — app's own SPN identity
 #
+# Pipeline env — AppKit injects only variables listed here (plus platform vars). Bundle
+# `resources.apps.*.config.env` is not passed into the Node process; duplicate IDs here for runtime.
+# Optional: WEARABLE_PIPELINE_TRIGGER_ON_INGEST=false — disable auto DLT update after each ingest (default: on).
+# Override in Workspace → Apps → Environment if this app is copied to another workspace.
+#
 # Custom env vars (from secret scope + postgres resource):
 #   LAKEBASE_ENDPOINT     — Lakebase endpoint path (from postgres resource)
 #   ZEROBUS_CLIENT_ID     — ZeroBus SPN application_id
@@ -14,9 +19,20 @@
 #   ZEROBUS_WORKSPACE_URL — Databricks workspace URL for SDK calls
 #   ZEROBUS_ENDPOINT      — ZeroBus Ingest server endpoint
 #   ZEROBUS_TARGET_TABLE  — Fully qualified bronze table name
+#   DATABRICKS_WAREHOUSE_ID — SQL warehouse UUID (required by AppKit analytics manifest)
 
 command: ['npm', 'run', 'start']
 env:
+  # e2-demo-field-eng wearable medallion DLT — must match bundle target `wearable_medallion_pipeline_id` / pipeline name.
+  - name: WEARABLE_PIPELINE_ID
+    value: 10ada93b-30cd-4ae0-923e-d08b3c5efc75
+  - name: WEARABLE_PIPELINE_NAME
+    value: dbxw-wearable-medallion-dev
+
+  # AppKit plugin manifest maps sql_warehouse → DATABRICKS_WAREHOUSE_ID (not WAREHOUSE_ID).
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: wearables-sql-warehouse
+
   # Lakebase — endpoint path for AppKit lakebase plugin
   - name: LAKEBASE_ENDPOINT
     valueFrom: postgres

@@ -4,6 +4,8 @@ import { HomePage } from '@/pages/home/HomePage';
 import { HealthPage } from '@/pages/health/HealthPage';
 import { DocsPage } from '@/pages/docs/DocsPage';
 import { SecurityPage } from '@/pages/security/SecurityPage';
+import { InsightsDashboardPage } from '@/pages/insights/InsightsDashboardPage';
+import { DltProgressPage } from '@/pages/dlt/DltProgressPage';
 
 function Layout() {
   return (
@@ -31,7 +33,7 @@ function Footer() {
             />
             <div>
               <span className="text-white font-bold text-sm">dbxWearables</span>
-              <span className="text-gray-500 text-xs block">ZeroBus Health Data Gateway</span>
+              <span className="text-gray-500 text-xs block">Wearables Studio — Ingest &amp; insights</span>
             </div>
           </div>
 
@@ -86,6 +88,8 @@ const router = createBrowserRouter([
       { path: '/status', element: <HealthPage /> },
       { path: '/docs', element: <DocsPage /> },
       { path: '/security', element: <SecurityPage /> },
+      { path: '/insights', element: <InsightsDashboardPage /> },
+      { path: '/dlt', element: <DltProgressPage /> },
     ],
   },
 ]);

@@ -1,0 +1,19 @@
+# Single Lakeflow / SDP pipeline: ZeroBus Delta → streaming bronze ST → streaming silver STs → gold @dlt.table (MV-style).
+# Same external bronze table; optional
+# ingest-channel filter via wearables_ingest_channel_filter (see src/dlt/wearable_medallion.py).
+
+resources:
+  pipelines:
+    wearable_medallion:
+      name: dbxw-wearable-medallion-${bundle.target}
+      catalog: ${var.catalog}
+      schema: ${var.schema}
+      serverless: true
+      continuous: true
+      development: false
+      configuration:
+        wearables_bronze_table: ${var.catalog}.${var.schema}.wearables_zerobus
+        wearables_ingest_channel_filter: ${var.wearables_ingest_channel_filter}
+      libraries:
+        - file:
+            path: ../src/dlt/wearable_medallion.py

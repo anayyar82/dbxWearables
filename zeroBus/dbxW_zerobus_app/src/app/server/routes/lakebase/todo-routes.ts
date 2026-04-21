@@ -45,6 +45,17 @@ export async function setupSampleLakebaseRoutes(appkit: AppKitWithLakebase) {
   }
 
   appkit.server.extend((app) => {
+    app.get('/api/lakebase/health', async (_req, res) => {
+      try {
+        await appkit.lakebase.query('SELECT 1 AS ok');
+        res.json({ ok: true });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[lakebase] health check failed:', err);
+        res.status(503).json({ ok: false, error: message });
+      }
+    });
+
     // Support both current and legacy route prefixes.
     const todoBasePaths = ['/api/lakebase/todos', '/api/todos'];
 

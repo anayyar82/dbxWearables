@@ -1,4 +1,4 @@
--- Silver: Activity ring goals vs actuals (DLT: wearable_activity_ring_daily_silver)
+-- Silver: Activity ring goals vs actuals (DLT: 01_wearable_activity_ring_daily_silver)
 SELECT
   summary_date,
   user_id,
@@ -9,6 +9,6 @@ SELECT
   exercise_minutes_goal,
   stand_hours,
   stand_hours_goal
-FROM users.ankur_nayyar.wearable_activity_ring_daily_silver
+FROM users.ankur_nayyar.01_wearable_activity_ring_daily_silver
 WHERE summary_date >= current_date() - INTERVAL 30 DAYS
 ORDER BY summary_date DESC;

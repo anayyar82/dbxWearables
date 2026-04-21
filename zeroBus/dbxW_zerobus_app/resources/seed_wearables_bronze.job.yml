@@ -21,6 +21,10 @@ resources:
           default: append
         - name: user_id
           default: ""
+        - name: multi_user_mode
+          default: primary_plus_demo
+        - name: history_days
+          default: "60"
 
       tasks:
         - task_key: seed_bronze
@@ -34,6 +38,8 @@ resources:
               payload_size: "{{parameters.payload_size}}"
               seed_mode: "{{parameters.seed_mode}}"
               user_id: "{{parameters.user_id}}"
+              multi_user_mode: "{{parameters.multi_user_mode}}"
+              history_days: "{{parameters.history_days}}"
 
       environments:
         - environment_key: default

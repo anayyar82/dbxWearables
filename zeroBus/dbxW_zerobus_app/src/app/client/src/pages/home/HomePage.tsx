@@ -70,6 +70,18 @@ function HeroSection() {
                 View API Docs
               </Link>
               <Link
+                to="/insights"
+                className="bg-white/10 border border-white/20 text-white px-6 py-3 rounded-lg font-semibold text-sm hover:bg-white/20 transition-all"
+              >
+                Live insights
+              </Link>
+              <Link
+                to="/dlt"
+                className="bg-white/10 border border-white/20 text-white px-6 py-3 rounded-lg font-semibold text-sm hover:bg-white/20 transition-all"
+              >
+                Pipeline status
+              </Link>
+              <Link
                 to="/status"
                 className="bg-white/10 border border-white/20 text-white px-6 py-3 rounded-lg font-semibold text-sm hover:bg-white/20 transition-all"
               >

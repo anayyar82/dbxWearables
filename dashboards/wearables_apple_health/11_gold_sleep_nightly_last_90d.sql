@@ -9,6 +9,6 @@ SELECT
   in_bed_min,
   total_tracked_min,
   sleep_sessions
-FROM users.ankur_nayyar.wearable_gold_sleep_nightly
+FROM users.ankur_nayyar.01_wearable_gold_sleep_nightly
 WHERE sleep_night >= current_date() - INTERVAL 90 DAY
 ORDER BY sleep_night DESC, user_id;

@@ -337,21 +337,28 @@ async function runSingleCheck(check: HealthCheck): Promise<HealthCheck> {
       }
 
       case 'lakebase': {
-        // Try the lakebase todo endpoint as a connectivity check
-        const res = await fetch('/api/lakebase/todos', { signal: AbortSignal.timeout(10000) });
+        // Lightweight SELECT 1 — does not require app.todos DDL (setup can fail separately)
+        const res = await fetch('/api/lakebase/health', { signal: AbortSignal.timeout(10000) });
         const latencyMs = Math.round(performance.now() - start);
         if (res.ok) {
           return {
             ...check,
             status: 'ok',
-            message: 'Lakebase connection healthy — Postgres queries succeeding',
+            message: 'Lakebase connection healthy — SQL gateway reachable',
             latencyMs,
           };
         }
+        let detail = '';
+        try {
+          const j = (await res.json()) as { error?: string };
+          if (j?.error) detail = `: ${j.error}`;
+        } catch {
+          /* ignore */
+        }
         return {
           ...check,
-          status: 'warning',
-          message: `Lakebase returned HTTP ${res.status} — connection may be degraded`,
+          status: res.status === 503 ? 'error' : 'warning',
+          message: `Lakebase health check failed (HTTP ${res.status})${detail}. Confirm postgres resource permissions and LAKEBASE_ENDPOINT.`,
           latencyMs,
         };
       }

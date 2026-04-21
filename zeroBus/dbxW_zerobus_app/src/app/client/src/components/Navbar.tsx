@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router';
-import { Home } from 'lucide-react';
+import { BarChart3, Gauge, Home } from 'lucide-react';
 import { BrandIcon } from '@/components/BrandIcon';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
@@ -14,6 +14,8 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { to: '/', label: 'Overview', kind: 'lucide', icon: Home, end: true },
+  { to: '/insights', label: 'Insights', kind: 'lucide', icon: BarChart3 },
+  { to: '/dlt', label: 'Pipeline status', kind: 'lucide', icon: Gauge },
   { to: '/status', label: 'Health Status', kind: 'brand', brandKey: 'healthcare-white' },
   { to: '/docs', label: 'API Docs', kind: 'brand', brandKey: 'endpoint' },
   { to: '/security', label: 'Security', kind: 'brand', brandKey: 'data-security' },
@@ -41,9 +43,7 @@ export function Navbar() {
             <span className="text-white font-bold text-lg leading-tight tracking-tight">
               dbxWearables
             </span>
-            <span className="text-gray-400 text-xs leading-tight">
-              ZeroBus Health Data Gateway
-            </span>
+            <span className="text-gray-400 text-xs leading-tight">Wearables Studio</span>
           </div>
         </NavLink>
 

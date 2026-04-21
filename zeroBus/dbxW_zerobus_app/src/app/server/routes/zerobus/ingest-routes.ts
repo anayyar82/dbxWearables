@@ -66,13 +66,25 @@
 //   X-Record-Type: <any non-empty string>
 //   Body: one JSON object per line (NDJSON)
 //
+// Optional per-line field (demo / batch tools only — not sent by iOS):
+//   demo_user_id: non-empty string → becomes bronze user_id; stripped from stored body VARIANT.
+//
 // Response contract (this endpoint → client):
 //   { status: "success"|"error", message: string, record_id?: string,
-//     records_ingested?: number, record_ids?: string[], duration_ms?: number }
+//     records_ingested?: number, record_ids?: string[], duration_ms?: number,
+//     pipeline_update?: { triggered, update_id?, pipeline_id?, update?, error?, skipped? } }
 //   (compatible with iOS APIResponse.swift — unknown keys ignored)
 
 import express from 'express';
 import type { Application, Request, Response, NextFunction } from 'express';
+import {
+  getIngestMetricsSnapshot,
+  recordIngestFailure,
+  recordIngestSuccess,
+} from '../../services/ingest-metrics';
+import type { PipelineUpdateDetail } from '../../services/pipelines-service';
+import { getUpdate, primaryPipelineIdResolved, triggerUpdate } from '../../services/pipelines-service';
+import { workspaceApiConfigured } from '../../services/workspace-api-client';
 import { zeroBusService } from '../../services/zerobus-service';
 import type { WearablesRecord } from '../../services/zerobus-service';
 
@@ -86,12 +98,16 @@ const KNOWN_RECORD_TYPES = new Set([
   'deletes',
 ]);
 
-// ── Text body parser (fallback for text/plain requests) ────────────────
-// Only handles text/plain; NDJSON content types are handled by the error
-// recovery middleware + extractNdjsonBody() below.
+// ── Text body parser for NDJSON + plain text ───────────────────────────
+// Must include application/x-ndjson here: the global express.json() middleware
+// typically only binds application/json, so without this, /docs "Try it out"
+// (Content-Type: application/x-ndjson) would see an empty body and return 400.
+// Multi-line NDJSON that still hits json() and fails is recovered by the error
+// handler below; single-line NDJSON parsed as JSON into req.body is handled by
+// extractNdjsonBody().
 
 const textParser = express.text({
-  type: ['text/plain'],
+  type: ['text/plain', 'application/x-ndjson', 'application/ndjson'],
   limit: '10mb',
 });
 
@@ -130,6 +146,38 @@ function extractHeaders(req: Request): Record<string, string> {
 }
 
 const MAX_NDJSON_LINES = 10000;
+
+/** After successful ZeroBus insert, start a DLT pipeline update when workspace API + pipeline ID exist. */
+function shouldTriggerPipelineAfterIngest(): boolean {
+  const v = process.env.WEARABLE_PIPELINE_TRIGGER_ON_INGEST?.trim().toLowerCase();
+  if (v === 'false' || v === '0' || v === 'no') return false;
+  return true;
+}
+
+/**
+ * Optional per-line bronze `user_id` for demos (web /docs batch generator).
+ * If present as a non-empty string on the JSON object, it is removed from the
+ * payload stored in `body` so HealthKit + DLT shapes stay aligned.
+ */
+function payloadAndUserForLine(
+  line: unknown,
+  defaultUserId: string,
+): { payload: unknown; userId: string } {
+  if (line === null || typeof line !== 'object' || Array.isArray(line)) {
+    return { payload: line, userId: defaultUserId };
+  }
+  const o = line as Record<string, unknown>;
+  const raw = o.demo_user_id;
+  if (typeof raw !== 'string') {
+    return { payload: line, userId: defaultUserId };
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { payload: line, userId: defaultUserId };
+  }
+  const { demo_user_id: _drop, ...rest } = o;
+  return { payload: rest, userId: trimmed.slice(0, 256) };
+}
 
 /** Parse an NDJSON string into valid objects and per-line errors. */
 function parseNdjson(raw: string): { lines: unknown[]; errors: string[] } {
@@ -364,20 +412,72 @@ export async function setupZeroBusRoutes(appkit: AppKitServer) {
 
           // — Build records matching the bronze table schema ────────────
           const headers = extractHeaders(req);
+          // Align with seed notebook + DLT ingest-channel filter (wearable_medallion.py).
+          headers['x-ingest-channel'] = 'rest_app';
           const sourcePlatform =
             (req.headers['x-platform'] as string | undefined)?.toLowerCase() || 'unknown';
           const userId = extractUserFromToken(req);
-          const records: WearablesRecord[] = lines.map((line) =>
-            zeroBusService.buildRecord(line, headers, recordType, sourcePlatform, userId),
-          );
+          const records: WearablesRecord[] = lines.map((line) => {
+            const { payload, userId: uid } = payloadAndUserForLine(line, userId);
+            return zeroBusService.buildRecord(payload, headers, recordType, sourcePlatform, uid);
+          });
 
           // — Ingest via ZeroBus REST API ───────────────────────
           const ingested = await zeroBusService.ingestRecords(records);
+          recordIngestSuccess(recordType, ingested);
 
           const durationMs = Date.now() - startMs;
           console.log(
             `[ZeroBus] Ingested ${ingested} ${recordType} record(s) in ${durationMs}ms`,
           );
+
+          let pipelineUpdate:
+            | {
+                triggered: true;
+                update_id?: string;
+                pipeline_id: string;
+                /** First REST snapshot of the update (state / progress) for immediate UI. */
+                update?: PipelineUpdateDetail | null;
+              }
+            | { triggered: false; skipped?: string; error?: string; pipeline_id?: string }
+            | undefined;
+
+          if (shouldTriggerPipelineAfterIngest() && workspaceApiConfigured()) {
+            const pid = await primaryPipelineIdResolved();
+            if (pid) {
+              try {
+                const out = await triggerUpdate(pid);
+                let updateSnap: PipelineUpdateDetail | null = null;
+                if (out?.update_id) {
+                  updateSnap = await getUpdate(pid, out.update_id);
+                }
+                pipelineUpdate = {
+                  triggered: true,
+                  update_id: out?.update_id,
+                  pipeline_id: pid,
+                  update: updateSnap,
+                };
+                console.log(
+                  `[ZeroBus] Started DLT pipeline update for ${pid}: ${out?.update_id ?? '(no update_id in response)'} state=${updateSnap?.state ?? '?'}`,
+                );
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                console.warn('[ZeroBus] DLT pipeline trigger failed (ingest already committed):', msg);
+                pipelineUpdate = { triggered: false, error: msg, pipeline_id: pid };
+              }
+            } else {
+              pipelineUpdate = {
+                triggered: false,
+                skipped:
+                  'No pipeline UUID: set WEARABLE_PIPELINE_ID or ensure WEARABLE_PIPELINE_NAME matches a workspace pipeline and the app SPN can list pipelines',
+              };
+            }
+          } else if (shouldTriggerPipelineAfterIngest() && !workspaceApiConfigured()) {
+            pipelineUpdate = {
+              triggered: false,
+              skipped: 'Workspace API not configured (ZEROBUS_WORKSPACE_URL + app SPN)',
+            };
+          }
 
           // — Success response ──────────────────────────────────
           // Compatible with iOS APIResponse.swift (unknown keys ignored
@@ -391,9 +491,11 @@ export async function setupZeroBusRoutes(appkit: AppKitServer) {
             record_ids: records.map((r) => r.record_id),
             duration_ms: durationMs,
             ...(errors.length > 0 && { parse_warnings: errors }),
+            ...(pipelineUpdate && { pipeline_update: pipelineUpdate }),
           });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
+          recordIngestFailure(message);
           console.error('[ZeroBus] Ingest failed:', message);
 
           res.status(500).json({
@@ -417,6 +519,18 @@ export async function setupZeroBusRoutes(appkit: AppKitServer) {
         ...(envCheck.missing.length > 0 && {
           missing_env_vars: envCheck.missing,
         }),
+      });
+    });
+
+    // ── GET /api/v1/healthkit/ingest-stats ─────────────────────────
+    // In-process counters since app boot (demo / status dashboard).
+
+    app.get('/api/v1/healthkit/ingest-stats', (_req: Request, res: Response) => {
+      const envCheck = zeroBusService.checkEnv();
+      res.json({
+        zerobus_env_configured: envCheck.configured,
+        target_table: process.env.ZEROBUS_TARGET_TABLE ?? null,
+        ...getIngestMetricsSnapshot(),
       });
     });
   });

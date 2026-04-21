@@ -1,5 +1,10 @@
 # AI/BI (Lakeview) dashboard deployed with the bundle.
 # Requires a Pro SQL warehouse ID (set var.sql_warehouse_id per workspace).
+#
+# Dataset SQL uses fully qualified, backtick-quoted UC names (e.g. `users`.`ankur_nayyar`.`01_…`)
+# so digit-prefixed gold tables resolve correctly on the SQL warehouse. Those literals match
+# this bundle’s catalog/schema variables; if you retarget another catalog, update the .lvdash.json.
+# Do not reference @dlt.view pipeline-only objects — Lakeview needs UC tables / views.
 
 resources:
   dashboards:

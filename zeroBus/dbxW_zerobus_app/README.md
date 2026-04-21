@@ -7,12 +7,14 @@ Application bundle for the **dbxWearables ZeroBus** solution. This Databricks As
 The [dbxWearables](../../README.md) project ingests wearable and health app data into Databricks using AppKit, ZeroBus, Spark Declarative Pipelines, Lakebase, and AI/BI. The end-to-end flow is:
 
 ```
-Client App (HealthKit, etc.)
-  → Databricks App (AppKit REST API)        ← this bundle
-    ├─ ZeroBus SDK → UC Bronze Table        ← infra bundle creates the table
-    │    → Spark Declarative Pipeline       ← this bundle (silver → gold)
-    └─ Lakebase (Postgres) → app state      ← infra bundle creates the project
+Client (Apple HealthKit app | /docs demo NDJSON | future Android / APIs)
+  → Databricks App (AppKit REST API)              ← this bundle
+    ├─ ZeroBus SDK → UC bronze (wearables_zerobus) ← same schema for demo + prod
+    │    └─ DLT medallion (wearable_medallion.py) — streaming bronze/silver STs + gold MV-style @dlt.table
+    └─ Lakebase (Postgres) → app state               ← infra bundle creates the project
 ```
+
+**Replacing demo traffic with HealthKit:** keep the bronze table and headers contract; only the HTTP client changes. DLT reads JSON fields via snake_case keys (same as the iOS mappers).
 
 This application bundle owns everything **above** the foundational infrastructure: the AppKit app that receives data, the ZeroBus consumer that streams it, the Lakebase connection for operational state, and the Spark Declarative Pipelines that refine data through the medallion layers.
 
@@ -52,6 +54,28 @@ The app is a **TypeScript/Node.js** project built with `@databricks/appkit` (Exp
                     └─────────────────────────────────────────────┘
 ```
 
+### Medallion (single DLT pipeline)
+
+`resources/wearable_medallion.pipeline.yml` → `src/dlt/wearable_medallion.py` (continuous): **ZeroBus Delta → `01_wearable_bronze_stream` (append-only ST)** → **silver as `create_streaming_table` + `@append_flow`** → **gold as `@dlt.table` aggregations (MV-style in Lakeflow)**. UC names use the **`01_`** prefix. Refresh on demand via `wearable_medallion_refresh.job.yml`.
+
+Bronze rows are tagged for DLT filtering: **`x-ingest-channel`** = `notebook_simulator` (seed notebook) or `rest_app` (AppKit `/api/v1/healthkit/ingest`). Pipeline config **`wearables_ingest_channel_filter`** (`all` \| `notebook_simulator` \| `rest_app`) is set per target in `databricks.yml` (`var.wearables_ingest_channel_filter`). Legacy notebook seeds without the header still match `notebook_simulator` when `x-device-id` is `demo-notebook-seed`.
+
+If you see **“Table … is already managed by pipeline …”**, an older Lakeflow pipeline still owns those object names. This bundle uses the **`01_`** table prefix (for example `01_wearable_deletes_silver`) so the new `wearable_medallion` pipeline avoids colliding with legacy unprefixed tables. To reset only the prefixed tables, run `src/sql/drop_wearable_medallion_managed_objects.sql` (adjust catalog/schema), then start a pipeline update.
+
+Lakebase connectivity checks should use `GET /api/lakebase/health` (`SELECT 1`); the sample todos CRUD requires DDL on `app.todos` and may still fail if the database role cannot create schemas — that no longer blocks the Health page from showing “Lakebase OK”.
+
+### DLT live page (`/dlt`)
+
+The React **DLT live** page calls workspace Pipelines REST via the app’s service principal (`DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET`, `scope=all-apis`) and `ZEROBUS_WORKSPACE_URL`. Grant the app SPN **CAN RUN** (or **CAN VIEW**) on each pipeline.
+
+Set optional environment variables on the **Databricks App** deployment (UI or API), using pipeline UUIDs from **Workspace → Lakeflow Pipelines**:
+
+| Variable | Purpose |
+| --- | --- |
+| `WEARABLE_PIPELINE_ID` | Single medallion DLT pipeline UUID (`wearable_medallion` in the bundle) |
+
+Aliases: `WEARABLE_PIPELINE_BATCH_ID`, `WEARABLE_MEDALLION_PIPELINE_ID`. Optional label: `WEARABLE_PIPELINE_LABEL`.
+
 ### Plugins
 
 Configured in `src/app/appkit.plugins.json`:
@@ -84,9 +108,9 @@ Platform-injected (no `valueFrom` needed): `PGHOST`, `PGPORT`, `PGDATABASE`, `PG
 | Resource Type | Resource | Purpose | Status |
 | --- | --- | --- | --- |
 | Databricks App | `dbxw-zerobus-ingest-${var.schema}` | AppKit REST API + Lakebase + ZeroBus SDK | Defined |
-| Spark Declarative Pipeline | Silver/gold processing | Reads bronze → silver → gold | Planned |
-| Jobs | Pipeline orchestration | Scheduled runs of the pipeline | Planned |
-| Dashboards | AI/BI analytics | Wearable health data visualizations | Planned |
+| Spark Declarative Pipeline | `resources/wearable_medallion.pipeline.yml` → `wearable_medallion.py` | Streaming `01_wearable_bronze_stream` + silver STs + gold MVs (`01_` prefix); optional ingest-channel filter | Defined in bundle |
+| Jobs | `seed_wearables_bronze`, `wearable_medallion_refresh` | Seed bronze; trigger pipeline update | Defined |
+| Dashboards | Lakeview | Wearable health data visualizations | Defined |
 
 ## Bundle Structure
 

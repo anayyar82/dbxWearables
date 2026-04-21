@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import {
   Copy,
   Check,
@@ -7,8 +8,10 @@ import {
   ArrowUpRight,
   Tag,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 import { BrandIcon } from '@/components/BrandIcon';
+import { generateBatchNdjson, TEMPLATE_BY_TYPE, type DemoRecordType } from './demoNdjson';
 
 /* ═══════════════════════════════════════════════════════════════════
    DocsPage — API Documentation (Swagger-style)
@@ -141,9 +144,9 @@ function IngestEndpoint() {
               Maximum 10,000 lines per request. Maximum body size: 10MB.
             </p>
             <CodeBlock
-              title="Example: samples"
-              code={`{"type":"HKQuantityTypeIdentifierStepCount","value":8432,"unit":"count","startDate":"2025-01-15T08:00:00Z","endDate":"2025-01-15T08:30:00Z","sourceBundle":"com.apple.health"}
-{"type":"HKQuantityTypeIdentifierHeartRate","value":72,"unit":"count/min","startDate":"2025-01-15T08:15:00Z","endDate":"2025-01-15T08:15:00Z","sourceBundle":"com.apple.health"}`}
+              title="Example: samples (snake_case — matches iOS NDJSON and DLT parsers)"
+              code={`{"uuid":"…","type":"HKQuantityTypeIdentifierStepCount","value":8432,"unit":"count","start_date":"2026-01-15T08:00:00Z","end_date":"2026-01-15T08:30:00Z","source_name":"com.apple.health","source_bundle_id":"com.apple.Health"}
+{"uuid":"…","type":"HKQuantityTypeIdentifierHeartRate","value":72,"unit":"count/min","start_date":"2026-01-15T08:15:00Z","end_date":"2026-01-15T08:15:00Z","source_name":"com.apple.health"}`}
             />
           </div>
 
@@ -158,7 +161,13 @@ function IngestEndpoint() {
   "record_id": "a1b2c3d4-...",
   "records_ingested": 2,
   "record_ids": ["a1b2c3d4-...", "e5f6g7h8-..."],
-  "duration_ms": 145
+  "duration_ms": 145,
+  "pipeline_update": {
+    "triggered": true,
+    "update_id": "…",
+    "pipeline_id": "…",
+    "update": { "state": "RUNNING", "update_id": "…", "progress": { } }
+  }
 }`}
             />
           </div>
@@ -188,7 +197,7 @@ function IngestEndpoint() {
   -H "Content-Type: application/x-ndjson" \\
   -H "X-Record-Type: samples" \\
   -H "X-Platform: ios" \\
-  -d '{"type":"HKQuantityTypeIdentifierStepCount","value":8432,"unit":"count","startDate":"2025-01-15T08:00:00Z","endDate":"2025-01-15T08:30:00Z"}'`}
+  -d '{"uuid":"00000000-0000-4000-8000-000000000001","type":"HKQuantityTypeIdentifierStepCount","value":8432,"unit":"count","start_date":"2026-01-15T08:00:00Z","end_date":"2026-01-15T08:30:00Z","source_name":"com.apple.health"}'`}
             />
           </div>
         </div>
@@ -267,20 +276,112 @@ function HealthEndpoint() {
   );
 }
 
+const DLT_TERMINAL_STATES = new Set([
+  'COMPLETED',
+  'FAILED',
+  'CANCELED',
+  'CANCELLED',
+  'TIMEDOUT',
+  'TIMED_OUT',
+]);
+
+function isDltTerminalState(state: string | undefined): boolean {
+  if (!state) return false;
+  return DLT_TERMINAL_STATES.has(state.toUpperCase());
+}
+
 /* ── Try It Panel ─────────────────────────────────────────────────── */
 function TryItPanel() {
-  const [recordType, setRecordType] = useState('samples');
-  const [body, setBody] = useState(
-    '{"type":"HKQuantityTypeIdentifierStepCount","value":8432,"unit":"count","startDate":"2025-01-15T08:00:00Z","endDate":"2025-01-15T08:30:00Z"}'
-  );
+  const [recordType, setRecordType] = useState<DemoRecordType>('samples');
+  const [lineCount, setLineCount] = useState(25);
+  const [spanDays, setSpanDays] = useState(30);
+  const [demoUserSlots, setDemoUserSlots] = useState(6);
+  const [body, setBody] = useState(TEMPLATE_BY_TYPE.samples);
   const [response, setResponse] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<number | null>(null);
+  const [progressLine, setProgressLine] = useState<string | null>(null);
+  const [dltPoll, setDltPoll] = useState<{ pid: string; uid: string } | null>(null);
+  const [dltUpdate, setDltUpdate] = useState<Record<string, unknown> | null>(null);
+  const [dltPollEnded, setDltPollEnded] = useState(false);
+
+  useEffect(() => {
+    if (!dltPoll) return;
+    let cancelled = false;
+    let polls = 0;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+
+    const pollOnce = async (): Promise<boolean> => {
+      try {
+        const r = await fetch(
+          `/api/pipelines/${encodeURIComponent(dltPoll.pid)}/updates/${encodeURIComponent(dltPoll.uid)}`,
+        );
+        const j = (await r.json()) as { update?: Record<string, unknown>; error?: string };
+        if (cancelled) return true;
+        if (!r.ok) {
+          setDltUpdate({ error: j.error ?? r.statusText, http_status: r.status });
+          return true;
+        }
+        if (j.update) setDltUpdate(j.update);
+        else setDltUpdate({ error: j.error ?? `HTTP ${r.status}` });
+        const st = j.update?.state as string | undefined;
+        if (isDltTerminalState(st)) return true;
+      } catch (e) {
+        if (!cancelled) setDltUpdate({ error: String(e) });
+        return true;
+      }
+      polls += 1;
+      if (polls >= 90) {
+        if (!cancelled) {
+          setDltUpdate((u) => ({ ...(u ?? {}), poll_notice: 'Stopped polling after ~3 minutes.' }));
+        }
+        return true;
+      }
+      return false;
+    };
+
+    void (async () => {
+      setDltPollEnded(false);
+      const doneImmediately = await pollOnce();
+      if (cancelled) return;
+      if (doneImmediately) {
+        setDltPollEnded(true);
+        return;
+      }
+      intervalId = setInterval(() => {
+        void (async () => {
+          const done = await pollOnce();
+          if (done && intervalId) clearInterval(intervalId);
+          if (done && !cancelled) setDltPollEnded(true);
+        })();
+      }, 2000);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [dltPoll]);
+
+  const setTypeAndTemplate = (t: DemoRecordType) => {
+    setRecordType(t);
+    setBody(TEMPLATE_BY_TYPE[t]);
+  };
+
+  const fillGeneratedBatch = () => {
+    setBody(generateBatchNdjson(recordType, lineCount, spanDays, demoUserSlots));
+  };
+
+  const lineTotal = body.trim() ? body.trim().split(/\r?\n/).filter((l) => l.length > 0).length : 0;
 
   const sendRequest = async () => {
     setLoading(true);
     setResponse(null);
     setStatus(null);
+    setProgressLine('Sending NDJSON to ingest…');
+    setDltPoll(null);
+    setDltUpdate(null);
+    setDltPollEnded(false);
     try {
       const res = await fetch('/api/v1/healthkit/ingest', {
         method: 'POST',
@@ -292,11 +393,51 @@ function TryItPanel() {
         body,
       });
       setStatus(res.status);
-      const data = await res.json();
-      setResponse(JSON.stringify(data, null, 2));
+      const raw = await res.text();
+      let parsed: Record<string, unknown> | null = null;
+      try {
+        parsed = JSON.parse(raw) as Record<string, unknown>;
+        setResponse(JSON.stringify(parsed, null, 2));
+      } catch {
+        setResponse(raw || '(empty response body)');
+      }
+
+      if (res.ok && parsed?.status === 'success') {
+        const n = parsed.records_ingested;
+        setProgressLine(
+          typeof n === 'number'
+            ? `Bronze: ${n} row(s) accepted. Checking medallion DLT…`
+            : 'Ingest succeeded. Checking medallion DLT…',
+        );
+        const pu = parsed.pipeline_update as
+          | {
+              triggered?: boolean;
+              update_id?: string;
+              pipeline_id?: string;
+              update?: Record<string, unknown>;
+              error?: string;
+              skipped?: string;
+            }
+          | undefined;
+        if (pu?.triggered && pu.update_id && pu.pipeline_id) {
+          if (pu.update) setDltUpdate(pu.update);
+          setProgressLine((prev) =>
+            `${prev ?? ''} Same REST action as workspace “Trigger update”. Polling update ${pu.update_id!.slice(0, 8)}…`,
+          );
+          setDltPoll({ pid: pu.pipeline_id, uid: pu.update_id });
+        } else if (pu && pu.triggered === false) {
+          const why = pu.error ?? pu.skipped ?? 'skipped';
+          setProgressLine((prev) => `${prev ?? ''} DLT not started: ${why}.`);
+        } else {
+          setProgressLine((prev) => `${prev ?? ''} No pipeline_update in response (check bundle env).`);
+        }
+      } else {
+        setProgressLine(res.ok ? 'Unexpected response shape.' : `Request finished with HTTP ${res.status}.`);
+      }
     } catch (err) {
       setResponse(String(err));
       setStatus(0);
+      setProgressLine(`Request failed: ${String(err)}`);
     } finally {
       setLoading(false);
     }
@@ -304,54 +445,171 @@ function TryItPanel() {
 
   return (
     <div className="mt-4 bg-[var(--muted)] rounded-xl p-5 space-y-4">
-      <div className="grid sm:grid-cols-2 gap-4">
+      <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+        Use a single-line template, or generate up to 10,000 NDJSON lines with UUIDs and timestamps spread across the
+        last N days (same shape as the iOS app). Each line becomes one bronze row when ZeroBus accepts the batch.
+        With <span className="font-mono text-[var(--foreground)]">Demo user slots</span> greater than 1, lines include{' '}
+        <span className="font-mono">demo_user_id</span> (rotating demo personas); the server stores it as bronze{' '}
+        <span className="font-mono">user_id</span> and removes it from the JSON body so DLT parsers stay unchanged.
+      </p>
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div>
-          <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1">
-            X-Record-Type
-          </label>
+          <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1">X-Record-Type</label>
           <select
             value={recordType}
-            onChange={(e) => setRecordType(e.target.value)}
+            onChange={(e) => setTypeAndTemplate(e.target.value as DemoRecordType)}
             className="w-full bg-[var(--card)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm font-mono text-[var(--foreground)]"
           >
-            {['samples', 'workouts', 'sleep', 'activity_summaries', 'deletes'].map((t) => (
-              <option key={t} value={t}>{t}</option>
+            {(['samples', 'workouts', 'sleep', 'activity_summaries', 'deletes'] as const).map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
             ))}
           </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1">Lines to generate</label>
+          <input
+            type="number"
+            min={1}
+            max={10_000}
+            value={lineCount}
+            onChange={(e) => setLineCount(Math.max(1, Math.min(10_000, Number(e.target.value) || 1)))}
+            className="w-full bg-[var(--card)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--foreground)]"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1">Date spread (days)</label>
+          <input
+            type="number"
+            min={1}
+            max={730}
+            value={spanDays}
+            onChange={(e) => setSpanDays(Math.max(1, Math.min(730, Number(e.target.value) || 1)))}
+            className="w-full bg-[var(--card)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--foreground)]"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1">Demo user slots</label>
+          <input
+            type="number"
+            min={1}
+            max={48}
+            value={demoUserSlots}
+            onChange={(e) => setDemoUserSlots(Math.max(1, Math.min(48, Number(e.target.value) || 1)))}
+            className="w-full bg-[var(--card)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--foreground)]"
+            title="1 = default app user for every line; 2+ = rotate demo_user_id per line (matches notebook cohort + synth emails)"
+          />
+        </div>
+        <div className="flex items-end gap-2">
+          <button
+            type="button"
+            onClick={fillGeneratedBatch}
+            className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--muted)]"
+          >
+            <Sparkles className="h-4 w-4 text-[var(--dbx-lava-600)]" />
+            Generate into editor
+          </button>
         </div>
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1">
-          Request Body (NDJSON)
-        </label>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <label className="block text-xs font-medium text-[var(--muted-foreground)]">Request body (NDJSON)</label>
+          <span className="text-xs text-[var(--muted-foreground)] tabular-nums">{lineTotal} non-empty line(s)</span>
+        </div>
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          rows={4}
-          className="w-full bg-[var(--card)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--foreground)] resize-y"
+          rows={14}
+          className="w-full min-h-[140px] bg-[var(--card)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--foreground)] resize-y"
           placeholder="One JSON object per line..."
         />
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setBody(TEMPLATE_BY_TYPE[recordType])}
+          className="text-xs font-medium text-[var(--dbx-lava-600)] hover:underline"
+        >
+          Reset to single-line template
+        </button>
+      </div>
+
       <button
+        type="button"
         onClick={sendRequest}
-        disabled={loading}
+        disabled={loading || lineTotal === 0}
         className="gradient-red text-white px-5 py-2 rounded-lg text-sm font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-60 flex items-center gap-2"
       >
         <BrandIcon name="data-flow" className="h-4 w-4" />
-        {loading ? 'Sending...' : 'Send Request'}
+        {loading ? 'Sending...' : 'Send request'}
       </button>
+
+      {progressLine ? (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            loading
+              ? 'border-amber-500/40 bg-amber-950/25 text-amber-100'
+              : 'border-[var(--border)] bg-[var(--card)] text-[var(--foreground)]'
+          }`}
+        >
+          <p className="font-medium text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-1">Progress</p>
+          <p className="leading-relaxed">{progressLine}</p>
+          {dltPoll ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+              <Link to="/dlt" className="inline-flex items-center gap-1 font-medium text-[var(--dbx-lava-600)] hover:underline">
+                Open pipeline status
+                <ArrowUpRight className="h-3 w-3" />
+              </Link>
+              {!dltPollEnded ? (
+                <span className="text-[var(--muted-foreground)] inline-flex items-center gap-1">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--dbx-lava-500)] animate-pulse" />
+                  Live polling (every 2s)…
+                </span>
+              ) : (
+                <span className="text-[var(--muted-foreground)]">Polling finished.</span>
+              )}
+            </div>
+          ) : null}
+          {dltUpdate ? (
+            <div className="mt-3 rounded-md border border-[var(--border)] bg-black/20 p-3 font-mono text-[11px] text-[var(--muted-foreground)] max-h-48 overflow-auto">
+              <p className="text-[var(--foreground)] mb-1">
+                State:{' '}
+                <span className="text-[var(--dbx-lava-500)]">{String(dltUpdate.state ?? '—')}</span>
+              </p>
+              <pre className="whitespace-pre-wrap break-all">
+                {JSON.stringify(
+                  {
+                    update_id: dltUpdate.update_id,
+                    state: dltUpdate.state,
+                    progress: dltUpdate.progress,
+                    update_details: dltUpdate.update_details,
+                    error: dltUpdate.error ?? dltUpdate.fetch_error,
+                    poll_notice: dltUpdate.poll_notice,
+                  },
+                  null,
+                  2,
+                )}
+              </pre>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {response && (
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-medium text-[var(--muted-foreground)]">Response</span>
-            <span className={`text-xs font-mono px-2 py-0.5 rounded ${
-              status && status >= 200 && status < 300
-                ? 'bg-emerald-50 text-[var(--dbx-green-600)]'
-                : 'bg-red-50 text-red-600'
-            }`}>
+            <span
+              className={`text-xs font-mono px-2 py-0.5 rounded ${
+                status && status >= 200 && status < 300
+                  ? 'bg-emerald-50 text-[var(--dbx-green-600)]'
+                  : 'bg-red-50 text-red-600'
+              }`}
+            >
               {status}
             </span>
           </div>

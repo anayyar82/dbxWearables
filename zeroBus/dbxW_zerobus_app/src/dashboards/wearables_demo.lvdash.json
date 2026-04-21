@@ -3,61 +3,115 @@
     {
       "name": "d001",
       "displayName": "kpi_gold_rowcounts",
-      "query": "\nSELECT 'activity_enriched_daily' AS entity, COUNT(*) AS c FROM users.ankur_nayyar.wearable_gold_activity_enriched_daily\nUNION ALL SELECT 'sleep_nightly', COUNT(*) FROM users.ankur_nayyar.wearable_gold_sleep_nightly\nUNION ALL SELECT 'weekly_workouts', COUNT(*) FROM users.ankur_nayyar.wearable_gold_weekly_workout_summary\nUNION ALL SELECT 'cardio_vitals_daily', COUNT(*) FROM users.ankur_nayyar.wearable_gold_cardio_vitals_daily\nUNION ALL SELECT 'hk_family_weekly', COUNT(*) FROM users.ankur_nayyar.wearable_gold_hk_family_weekly\n",
+      "query": "\nSELECT 'activity_enriched_daily' AS entity, COUNT(*) AS c FROM `users`.`ankur_nayyar`.`01_wearable_gold_activity_enriched_daily`\nUNION ALL SELECT 'sleep_nightly', COUNT(*) FROM `users`.`ankur_nayyar`.`01_wearable_gold_sleep_nightly`\nUNION ALL SELECT 'weekly_workouts', COUNT(*) FROM `users`.`ankur_nayyar`.`01_wearable_gold_weekly_workout_summary`\nUNION ALL SELECT 'cardio_vitals_daily', COUNT(*) FROM `users`.`ankur_nayyar`.`01_wearable_gold_cardio_vitals_daily`\nUNION ALL SELECT 'hk_family_weekly', COUNT(*) FROM `users`.`ankur_nayyar`.`01_wearable_gold_hk_family_weekly`\n",
       "parameters": []
     },
     {
       "name": "d002",
       "displayName": "activity_move_trend",
-      "query": "\nSELECT day, user_id, move_ring_ratio, total_steps, exercise_ring_ratio, stand_ring_ratio\nFROM users.ankur_nayyar.wearable_vw_gold_activity_last_45d\nWHERE day >= current_date() - INTERVAL 45 DAY\nORDER BY day\n",
+      "query": "\nSELECT day, user_id, move_ring_ratio, total_steps, exercise_ring_ratio, stand_ring_ratio\nFROM `users`.`ankur_nayyar`.`01_wearable_gold_activity_enriched_daily`\nWHERE day >= date_sub(current_date(), 730)\nORDER BY day\n",
       "parameters": []
     },
     {
       "name": "d003",
       "displayName": "sleep_stage_totals",
-      "query": "\nSELECT sleep_night, user_id, deep_sleep_min, rem_sleep_min, core_sleep_min, awake_min, total_tracked_min\nFROM users.ankur_nayyar.wearable_vw_gold_sleep_last_30_sessions\nORDER BY sleep_night DESC\n",
+      "query": "\nSELECT sleep_night, user_id, deep_sleep_min, rem_sleep_min, core_sleep_min, awake_min, total_tracked_min\nFROM `users`.`ankur_nayyar`.`01_wearable_gold_sleep_nightly`\nWHERE sleep_night >= date_sub(current_date(), 730)\nORDER BY sleep_night DESC\n",
       "parameters": []
     },
     {
       "name": "d004",
       "displayName": "workout_weekly_bars",
-      "query": "\nSELECT week_start, user_id, workout_count, total_duration_min, total_energy_kcal, total_distance_m / 1000.0 AS distance_km\nFROM users.ankur_nayyar.wearable_vw_gold_workouts_recent\nORDER BY week_start\n",
+      "query": "\nSELECT week_start, user_id, workout_count, total_duration_min, total_energy_kcal, total_distance_m / 1000.0 AS distance_km\nFROM `users`.`ankur_nayyar`.`01_wearable_gold_weekly_workout_summary`\nWHERE week_start >= date_sub(current_timestamp(), 732)\nORDER BY week_start\n",
       "parameters": []
     },
     {
       "name": "d005",
       "displayName": "vitals_hr_trend",
-      "query": "\nSELECT day, user_id, resting_hr_avg, heart_rate_avg, heart_rate_max, hrv_sdnn_avg, spo2_avg\nFROM users.ankur_nayyar.wearable_gold_cardio_vitals_daily\nWHERE day >= current_date() - INTERVAL 60 DAY\nORDER BY day\n",
+      "query": "\nSELECT day, user_id, resting_hr_avg, heart_rate_avg, heart_rate_max, hrv_sdnn_avg, spo2_avg\nFROM `users`.`ankur_nayyar`.`01_wearable_gold_cardio_vitals_daily`\nWHERE day >= current_date() - INTERVAL 730 DAY\nORDER BY day\n",
       "parameters": []
     },
     {
       "name": "d006",
       "displayName": "hk_family_weekly_lines",
-      "query": "\nSELECT week_start, user_id, metric_family,\n  concat(user_id, ' | ', metric_family) AS series_key,\n  avg_value, readings\nFROM users.ankur_nayyar.wearable_gold_hk_family_weekly\nWHERE week_start >= current_timestamp() - INTERVAL 84 DAY\nORDER BY week_start, metric_family\n",
+      "query": "\nSELECT week_start, user_id, metric_family,\n  concat(user_id, ' | ', metric_family) AS series_key,\n  avg_value, readings\nFROM `users`.`ankur_nayyar`.`01_wearable_gold_hk_family_weekly`\nWHERE week_start >= current_timestamp() - INTERVAL 732 DAY\nORDER BY week_start, metric_family\n",
       "parameters": []
     },
     {
       "name": "d007",
       "displayName": "ingest_mix",
-      "query": "\nSELECT ingest_day, user_id, record_type, row_count\nFROM users.ankur_nayyar.wearable_gold_bronze_ingest_daily\nWHERE ingest_day >= current_date() - INTERVAL 60 DAY\nORDER BY ingest_day DESC, row_count DESC\n",
+      "query": "\nSELECT ingest_day, user_id, record_type, row_count\nFROM `users`.`ankur_nayyar`.`01_wearable_gold_bronze_ingest_daily`\nWHERE ingest_day >= current_date() - INTERVAL 730 DAY\nORDER BY ingest_day DESC, row_count DESC\n",
       "parameters": []
     },
     {
       "name": "d008",
       "displayName": "daily_steps",
-      "query": "\nSELECT day, user_id, total_steps, sample_intervals\nFROM users.ankur_nayyar.wearable_gold_daily_steps\nWHERE day >= current_date() - INTERVAL 60 DAY\nORDER BY day\n",
+      "query": "\nSELECT day, user_id, total_steps, sample_intervals\nFROM `users`.`ankur_nayyar`.`01_wearable_gold_daily_steps`\nWHERE day >= current_date() - INTERVAL 730 DAY\nORDER BY day\n",
       "parameters": []
     },
     {
       "name": "d009",
       "displayName": "hk_quantity_daily_top",
-      "query": "\nSELECT day, user_id, regexp_replace(hk_type,'HKQuantityTypeIdentifier','') AS metric, avg_value, sample_rows\nFROM users.ankur_nayyar.wearable_hk_quantity_daily_gold\nWHERE day >= current_date() - INTERVAL 45 DAY\nORDER BY sample_rows DESC\nLIMIT 500\n",
+      "query": "\nSELECT day, user_id, regexp_replace(hk_type,'HKQuantityTypeIdentifier','') AS metric, avg_value, sample_rows\nFROM `users`.`ankur_nayyar`.`01_wearable_hk_quantity_daily_gold`\nWHERE day >= current_date() - INTERVAL 730 DAY\nORDER BY sample_rows DESC\nLIMIT 500\n",
       "parameters": []
     },
     {
       "name": "d010",
       "displayName": "bronze_total",
-      "query": "SELECT COUNT(*) AS row_count FROM users.ankur_nayyar.wearables_zerobus",
+      "query": "SELECT COUNT(*) AS row_count FROM `users`.`ankur_nayyar`.`wearables_zerobus`",
+      "parameters": []
+    },
+    {
+      "name": "d011",
+      "displayName": "active_users_90d",
+      "query": "\nSELECT COUNT(DISTINCT user_id) AS user_count\nFROM `users`.`ankur_nayyar`.`01_wearable_gold_activity_enriched_daily`\nWHERE day >= date_sub(current_date(), 90)\n",
+      "parameters": []
+    },
+    {
+      "name": "d012",
+      "displayName": "leaderboard_steps_30d",
+      "query": "\nSELECT user_id,\n  round(avg(total_steps), 0) AS avg_steps_30d,\n  max(total_steps) AS peak_steps_30d,\n  round(sum(total_steps), 0) AS sum_steps_30d\nFROM `users`.`ankur_nayyar`.`01_wearable_gold_daily_steps`\nWHERE day >= date_sub(current_date(), 730)\nGROUP BY user_id\nORDER BY avg_steps_30d DESC NULLS LAST\n",
+      "parameters": []
+    },
+    {
+      "name": "d013",
+      "displayName": "ring_scores_30d",
+      "query": "\nSELECT user_id,\n  round(avg(move_ring_ratio), 3) AS avg_move_ratio,\n  round(avg(exercise_ring_ratio), 3) AS avg_exercise_ratio,\n  round(avg(stand_ring_ratio), 3) AS avg_stand_ratio\nFROM `users`.`ankur_nayyar`.`01_wearable_gold_activity_enriched_daily`\nWHERE day >= date_sub(current_date(), 730)\nGROUP BY user_id\nORDER BY avg_move_ratio DESC NULLS LAST\n",
+      "parameters": []
+    },
+    {
+      "name": "d014",
+      "displayName": "sleep_profile_60d",
+      "query": "\nSELECT user_id,\n  round(avg(deep_sleep_min), 1) AS avg_deep_min,\n  round(avg(rem_sleep_min), 1) AS avg_rem_min,\n  round(avg(total_tracked_min), 1) AS avg_tracked_min,\n  count(*) AS nights\nFROM `users`.`ankur_nayyar`.`01_wearable_gold_sleep_nightly`\nWHERE sleep_night >= date_sub(current_date(), 730)\nGROUP BY user_id\nORDER BY avg_tracked_min DESC NULLS LAST\n",
+      "parameters": []
+    },
+    {
+      "name": "d015",
+      "displayName": "workout_volume_12w",
+      "query": "\nSELECT user_id,\n  sum(workout_count) AS workouts_12w,\n  round(sum(total_duration_min), 0) AS total_minutes_12w,\n  round(sum(total_energy_kcal), 0) AS total_kcal_12w\nFROM `users`.`ankur_nayyar`.`01_wearable_gold_weekly_workout_summary`\nWHERE week_start >= date_sub(current_timestamp(), 732)\nGROUP BY user_id\nORDER BY workouts_12w DESC NULLS LAST\n",
+      "parameters": []
+    },
+    {
+      "name": "d016",
+      "displayName": "vitals_by_user_30d",
+      "query": "\nSELECT user_id,\n  round(avg(resting_hr_avg), 1) AS avg_resting_hr,\n  round(avg(heart_rate_avg), 1) AS avg_hr,\n  round(avg(spo2_avg), 3) AS avg_spo2\nFROM `users`.`ankur_nayyar`.`01_wearable_gold_cardio_vitals_daily`\nWHERE day >= date_sub(current_date(), 730)\nGROUP BY user_id\nORDER BY user_id\n",
+      "parameters": []
+    },
+    {
+      "name": "d017",
+      "displayName": "ingest_volume_30d_by_user",
+      "query": "\nSELECT user_id, sum(row_count) AS ingest_rows_30d\nFROM `users`.`ankur_nayyar`.`01_wearable_gold_bronze_ingest_daily`\nWHERE ingest_day >= date_sub(current_date(), 730)\nGROUP BY user_id\nORDER BY ingest_rows_30d DESC NULLS LAST\n",
+      "parameters": []
+    },
+    {
+      "name": "d018",
+      "displayName": "hk_metric_diversity_45d",
+      "query": "\nSELECT user_id, count(DISTINCT metric) AS distinct_hk_types\nFROM (\n  SELECT user_id, regexp_replace(hk_type, 'HKQuantityTypeIdentifier', '') AS metric\n  FROM `users`.`ankur_nayyar`.`01_wearable_hk_quantity_daily_gold`\n  WHERE day >= date_sub(current_date(), 730)\n) t\nGROUP BY user_id\nORDER BY distinct_hk_types DESC NULLS LAST\n",
+      "parameters": []
+    },
+    {
+      "name": "d019",
+      "displayName": "subject_daily_gold_snapshot",
+      "query": "\nSELECT day, subject_id AS user_id, sum(event_count) AS total_events\nFROM `users`.`ankur_nayyar`.`01_wearable_subject_daily_gold`\nWHERE day >= date_sub(current_date(), 730)\nGROUP BY day, subject_id\nORDER BY day DESC, user_id\nLIMIT 800\n",
       "parameters": []
     }
   ],
@@ -1233,6 +1287,1398 @@
           }
         }
       ]
+    },
+    {
+      "name": "p_people",
+      "displayName": "Multi-user \u2014 Leaderboards",
+      "layout": [
+        {
+          "widget": {
+            "name": "pc_users",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d011",
+                  "fields": [
+                    {
+                      "name": "user_count",
+                      "expression": "`user_count`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "user_count",
+                  "displayName": "Distinct users (90d activity)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Distinct users (90d activity)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "tbl_steps",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d012",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "avg_steps_30d",
+                      "expression": "`avg_steps_30d`"
+                    },
+                    {
+                      "name": "peak_steps_30d",
+                      "expression": "`peak_steps_30d`"
+                    },
+                    {
+                      "name": "sum_steps_30d",
+                      "expression": "`sum_steps_30d`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "user_id",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100000,
+                    "title": "user_id"
+                  },
+                  {
+                    "fieldName": "avg_steps_30d",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "avg_steps_30d"
+                  },
+                  {
+                    "fieldName": "peak_steps_30d",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100002,
+                    "title": "peak_steps_30d"
+                  },
+                  {
+                    "fieldName": "sum_steps_30d",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100003,
+                    "title": "sum_steps_30d"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Step leaderboard (30 days)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_steps",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d012",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "avg_steps_30d",
+                      "expression": "`avg_steps_30d`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "user_id",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "user_id"
+                },
+                "y": {
+                  "fieldName": "avg_steps_30d",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "avg_steps_30d"
+                },
+                "color": {
+                  "fieldName": "user_id",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "user"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Avg steps by user (30d)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 10,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "tbl_rings",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d013",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "avg_move_ratio",
+                      "expression": "`avg_move_ratio`"
+                    },
+                    {
+                      "name": "avg_exercise_ratio",
+                      "expression": "`avg_exercise_ratio`"
+                    },
+                    {
+                      "name": "avg_stand_ratio",
+                      "expression": "`avg_stand_ratio`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "user_id",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100000,
+                    "title": "user_id"
+                  },
+                  {
+                    "fieldName": "avg_move_ratio",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "avg_move_ratio"
+                  },
+                  {
+                    "fieldName": "avg_exercise_ratio",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100002,
+                    "title": "avg_exercise_ratio"
+                  },
+                  {
+                    "fieldName": "avg_stand_ratio",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100003,
+                    "title": "avg_stand_ratio"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Activity ring scores by user (30d)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 16,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "tbl_sleep",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d014",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "avg_deep_min",
+                      "expression": "`avg_deep_min`"
+                    },
+                    {
+                      "name": "avg_rem_min",
+                      "expression": "`avg_rem_min`"
+                    },
+                    {
+                      "name": "avg_tracked_min",
+                      "expression": "`avg_tracked_min`"
+                    },
+                    {
+                      "name": "nights",
+                      "expression": "`nights`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "user_id",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100000,
+                    "title": "user_id"
+                  },
+                  {
+                    "fieldName": "avg_deep_min",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "avg_deep_min"
+                  },
+                  {
+                    "fieldName": "avg_rem_min",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100002,
+                    "title": "avg_rem_min"
+                  },
+                  {
+                    "fieldName": "avg_tracked_min",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100003,
+                    "title": "avg_tracked_min"
+                  },
+                  {
+                    "fieldName": "nights",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100004,
+                    "title": "nights"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Sleep profile by user (60 nights)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 22,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "tbl_workouts",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d015",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "workouts_12w",
+                      "expression": "`workouts_12w`"
+                    },
+                    {
+                      "name": "total_minutes_12w",
+                      "expression": "`total_minutes_12w`"
+                    },
+                    {
+                      "name": "total_kcal_12w",
+                      "expression": "`total_kcal_12w`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "user_id",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100000,
+                    "title": "user_id"
+                  },
+                  {
+                    "fieldName": "workouts_12w",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "workouts_12w"
+                  },
+                  {
+                    "fieldName": "total_minutes_12w",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100002,
+                    "title": "total_minutes_12w"
+                  },
+                  {
+                    "fieldName": "total_kcal_12w",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100003,
+                    "title": "total_kcal_12w"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Workout volume (12 weeks)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 29,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "tbl_vitals_u",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d016",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "avg_resting_hr",
+                      "expression": "`avg_resting_hr`"
+                    },
+                    {
+                      "name": "avg_hr",
+                      "expression": "`avg_hr`"
+                    },
+                    {
+                      "name": "avg_spo2",
+                      "expression": "`avg_spo2`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "user_id",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100000,
+                    "title": "user_id"
+                  },
+                  {
+                    "fieldName": "avg_resting_hr",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "avg_resting_hr"
+                  },
+                  {
+                    "fieldName": "avg_hr",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100002,
+                    "title": "avg_hr"
+                  },
+                  {
+                    "fieldName": "avg_spo2",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100003,
+                    "title": "avg_spo2"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Vitals by user (30d)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 35,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "tbl_ingest_u",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d017",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "ingest_rows_30d",
+                      "expression": "`ingest_rows_30d`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "user_id",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100000,
+                    "title": "user_id"
+                  },
+                  {
+                    "fieldName": "ingest_rows_30d",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "ingest_rows_30d"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Bronze ingest rows by user (30d, gold rollup)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 40,
+            "width": 3,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "tbl_div",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d018",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "distinct_hk_types",
+                      "expression": "`distinct_hk_types`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "user_id",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100000,
+                    "title": "user_id"
+                  },
+                  {
+                    "fieldName": "distinct_hk_types",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "distinct_hk_types"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "HK metric diversity (45d)"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 40,
+            "width": 3,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "ln_subject",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d019",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "total_events",
+                      "expression": "`total_events`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "day",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "day"
+                },
+                "y": {
+                  "fieldName": "total_events",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "total_events"
+                },
+                "series": {
+                  "fieldName": "user_id",
+                  "displayName": "user_id"
+                },
+                "label": {
+                  "show": false
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Subject daily \u2014 total events (45d)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 45,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "p_global_filters",
+      "displayName": "Global filters",
+      "layout": [
+        {
+          "widget": {
+            "name": "gf_users",
+            "queries": [
+              {
+                "name": "wearables_gf/d002_user_id",
+                "query": {
+                  "datasetName": "d002",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d003_user_id",
+                "query": {
+                  "datasetName": "d003",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d004_user_id",
+                "query": {
+                  "datasetName": "d004",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d005_user_id",
+                "query": {
+                  "datasetName": "d005",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d006_user_id",
+                "query": {
+                  "datasetName": "d006",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d007_user_id",
+                "query": {
+                  "datasetName": "d007",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d008_user_id",
+                "query": {
+                  "datasetName": "d008",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d009_user_id",
+                "query": {
+                  "datasetName": "d009",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d012_user_id",
+                "query": {
+                  "datasetName": "d012",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d013_user_id",
+                "query": {
+                  "datasetName": "d013",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d014_user_id",
+                "query": {
+                  "datasetName": "d014",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d015_user_id",
+                "query": {
+                  "datasetName": "d015",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d016_user_id",
+                "query": {
+                  "datasetName": "d016",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d017_user_id",
+                "query": {
+                  "datasetName": "d017",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d018_user_id",
+                "query": {
+                  "datasetName": "d018",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d019_user_id",
+                "query": {
+                  "datasetName": "d019",
+                  "fields": [
+                    {
+                      "name": "user_id",
+                      "expression": "`user_id`"
+                    },
+                    {
+                      "name": "user_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d002_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d003_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d004_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d005_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d006_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d007_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d008_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d009_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d012_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d013_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d014_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d015_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d016_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d017_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d018_user_id"
+                  },
+                  {
+                    "displayName": "user_id",
+                    "fieldName": "user_id",
+                    "queryName": "wearables_gf/d019_user_id"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Users (multi-select)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "gf_day_range",
+            "queries": [
+              {
+                "name": "wearables_gf/d002_day_range",
+                "query": {
+                  "datasetName": "d002",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "day_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d005_day_range",
+                "query": {
+                  "datasetName": "d005",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "day_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d008_day_range",
+                "query": {
+                  "datasetName": "d008",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "day_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d009_day_range",
+                "query": {
+                  "datasetName": "d009",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "day_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d019_day_range",
+                "query": {
+                  "datasetName": "d019",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "day_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-range-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "day",
+                    "fieldName": "day",
+                    "queryName": "wearables_gf/d002_day_range"
+                  },
+                  {
+                    "displayName": "day",
+                    "fieldName": "day",
+                    "queryName": "wearables_gf/d005_day_range"
+                  },
+                  {
+                    "displayName": "day",
+                    "fieldName": "day",
+                    "queryName": "wearables_gf/d008_day_range"
+                  },
+                  {
+                    "displayName": "day",
+                    "fieldName": "day",
+                    "queryName": "wearables_gf/d009_day_range"
+                  },
+                  {
+                    "displayName": "day",
+                    "fieldName": "day",
+                    "queryName": "wearables_gf/d019_day_range"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Calendar day (activity, vitals, steps, HK qty, subject daily)"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "gf_sleep_night",
+            "queries": [
+              {
+                "name": "wearables_gf/d003_sleep_range",
+                "query": {
+                  "datasetName": "d003",
+                  "fields": [
+                    {
+                      "name": "sleep_night",
+                      "expression": "`sleep_night`"
+                    },
+                    {
+                      "name": "sleep_night_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-range-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "sleep_night",
+                    "fieldName": "sleep_night",
+                    "queryName": "wearables_gf/d003_sleep_range"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Sleep night"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "gf_week_start",
+            "queries": [
+              {
+                "name": "wearables_gf/d004_week_range",
+                "query": {
+                  "datasetName": "d004",
+                  "fields": [
+                    {
+                      "name": "week_start",
+                      "expression": "`week_start`"
+                    },
+                    {
+                      "name": "week_start_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "wearables_gf/d006_week_range",
+                "query": {
+                  "datasetName": "d006",
+                  "fields": [
+                    {
+                      "name": "week_start",
+                      "expression": "`week_start`"
+                    },
+                    {
+                      "name": "week_start_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-range-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "week_start",
+                    "fieldName": "week_start",
+                    "queryName": "wearables_gf/d004_week_range"
+                  },
+                  {
+                    "displayName": "week_start",
+                    "fieldName": "week_start",
+                    "queryName": "wearables_gf/d006_week_range"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Week start (workouts + HK family weekly)"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "gf_ingest_day",
+            "queries": [
+              {
+                "name": "wearables_gf/d007_ingest_range",
+                "query": {
+                  "datasetName": "d007",
+                  "fields": [
+                    {
+                      "name": "ingest_day",
+                      "expression": "`ingest_day`"
+                    },
+                    {
+                      "name": "ingest_day_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-range-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "ingest_day",
+                    "fieldName": "ingest_day",
+                    "queryName": "wearables_gf/d007_ingest_range"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Ingest day (bronze ingest mix)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 4,
+            "width": 4,
+            "height": 2
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_GLOBAL_FILTERS"
     }
   ]
 }

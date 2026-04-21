@@ -1,36 +1,104 @@
-"""DLT: ZeroBus bronze ``wearables_zerobus`` -> Apple Health–shaped silver + gold.
+"""DLT: single pipeline — ZeroBus bronze Delta → **streaming bronze ST** → **append-only silver STs** → **gold MVs**.
 
-Configure pipeline key ``wearables_bronze_table`` to the fully qualified bronze
-Delta table (e.g. ``users.some_schema.wearables_zerobus``).
+**Flow**
 
-Silver uses **batch** reads from bronze and ``row_number`` deduplication on the
-normalized ``event_id`` (streaming + ``row_number`` is not supported on this path).
+1. **ZeroBus** writes to the configured UC Delta table (``wearables_bronze_table`` — e.g. ``wearables_zerobus``).
+2. **``01_wearable_bronze_stream``** — ``create_streaming_table`` + ``@append_flow`` from ``readStream`` on that
+   table (append-only micro-batches; watermark on ``ingested_at``).
+3. **Silver** — one ``create_streaming_table`` + ``@append_flow`` per domain, each reading
+   ``_read_stream("01_wearable_bronze_stream")`` with ``record_type`` filters. Watermark + ``dropDuplicates`` on
+   natural keys for idempotency (append semantics, not ``row_number`` batch dedupe).
+4. **Gold** — ``@dlt.table`` aggregations over ``dlt.read(...)`` of silver streaming tables; Lakeflow surfaces
+   these as **materialized views** / incremental sinks (not streaming gold append_flows).
+
+**One bundle pipeline** (``wearable_medallion.pipeline.yml``): ``continuous: true``, single Python module.
+
+**Configuration** (pipeline ``configuration`` keys):
+
+- ``wearables_bronze_table`` — FQN of the UC bronze Delta table.
+- ``wearables_ingest_channel_filter`` — ``all`` (default), ``notebook_simulator``, or ``rest_app``.
+  Rows are classified from ``headers``:
+
+  - Explicit ``x-ingest-channel`` (set by the seed notebook as ``notebook_simulator`` and by the
+    app ingest route as ``rest_app``).
+  - Legacy notebook seeds: ``x-device-id = demo-notebook-seed`` → treated as ``notebook_simulator``.
+
+  Use ``all`` in production so simulator + app + device data share one medallion; set a filter for
+  demos that should only materialize one path.
+
+**UC table names** use the ``01_`` prefix (for example ``01_wearable_deletes_silver``) so this pipeline
+does not collide with legacy pipelines that still own unprefixed ``wearable_*`` tables.
 """
 
 from __future__ import annotations
 
-from pyspark.sql import SparkSession
+from pyspark.sql import Column, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import ArrayType, StringType, StructField, StructType
 from pyspark.sql.window import Window
 
 import dlt
 
+try:
+    from pyspark import pipelines as _ldp  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover
+    import dlt as _ldp
+
+create_streaming_table = _ldp.create_streaming_table
+append_flow = _ldp.append_flow
+
+_read_stream = _ldp.read_stream if hasattr(_ldp, "read_stream") else dlt.read_stream
+
 spark = SparkSession.builder.getOrCreate()
 
 BRONZE_CONF = "wearables_bronze_table"
+CHANNEL_FILTER_CONF = "wearables_ingest_channel_filter"
 
 
 def _bronze_fqn() -> str:
     return spark.conf.get(BRONZE_CONF, "users.ankur_nayyar.wearables_zerobus")
 
 
-def _bronze_df():
-    return spark.read.format("delta").table(_bronze_fqn())
+def _ingest_channel_value() -> Column:
+    """Logical source: notebook_simulator | rest_app (see module docstring)."""
+    jh = F.to_json(F.col("headers"))
+    explicit = F.lower(F.trim(F.get_json_object(jh, "$.x-ingest-channel")))
+    device = F.lower(F.trim(F.get_json_object(jh, "$.x-device-id")))
+    return (
+        F.when((explicit.isNotNull()) & (F.length(explicit) > 0), explicit)
+        .when(device == F.lit("demo-notebook-seed"), F.lit("notebook_simulator"))
+        .otherwise(F.lit("rest_app"))
+    )
+
+
+def _ingest_channel_filter() -> Column:
+    mode = spark.conf.get(CHANNEL_FILTER_CONF, "all").strip().lower()
+    if mode in ("", "all"):
+        return F.lit(True)
+    if mode == "notebook_simulator":
+        return _ingest_channel_value() == F.lit("notebook_simulator")
+    if mode == "rest_app":
+        return _ingest_channel_value() == F.lit("rest_app")
+    return F.lit(True)
 
 
 def _json_body_col():
     return F.to_json(F.col("body"))
+
+
+def _parse_hk_iso_timestamp(col: Column) -> Column:
+    """
+    Parse HealthKit JSON ISO-8601 timestamps. Payloads commonly end with ``Z``;
+    Spark's ``XXX`` zone pattern matches numeric offsets (+00:00), not ``Z``,
+    so include explicit Z patterns then fall back to default parsing.
+    """
+    return F.coalesce(
+        F.to_timestamp(col, "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+        F.to_timestamp(col, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"),
+        F.to_timestamp(col, "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'"),
+        F.to_timestamp(col, "yyyy-MM-dd'T'HH:mm:ssXXX"),
+        F.to_timestamp(col),
+    )
 
 
 def _silver_event_frame(df):
@@ -44,14 +112,8 @@ def _silver_event_frame(df):
         .when(F.col("record_type") == F.lit("activity_summaries"), F.lit("activity_summary"))
         .otherwise(F.col("record_type")),
     )
-    start_ts = F.coalesce(
-        F.to_timestamp(F.get_json_object(j, "$.start_date"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
-        F.to_timestamp(F.get_json_object(j, "$.start_date")),
-    )
-    end_ts = F.coalesce(
-        F.to_timestamp(F.get_json_object(j, "$.end_date"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
-        F.to_timestamp(F.get_json_object(j, "$.end_date")),
-    )
+    start_ts = _parse_hk_iso_timestamp(F.get_json_object(j, "$.start_date"))
+    end_ts = _parse_hk_iso_timestamp(F.get_json_object(j, "$.end_date"))
     effective_time = F.coalesce(start_ts, end_ts, F.col("ingested_at"))
     sample_value = F.get_json_object(j, "$.value").cast("double")
     workout_duration = F.get_json_object(j, "$.duration_seconds").cast("double")
@@ -83,78 +145,142 @@ def _silver_event_frame(df):
     )
 
 
-@dlt.table(
-    name="wearable_events_silver",
-    comment="All record types normalized for dedupe and downstream joins.",
-    table_properties={"quality": "silver"},
+# ---------------------------------------------------------------------------
+# Streaming bronze — append-only mirror of ZeroBus Delta table
+# ---------------------------------------------------------------------------
+
+create_streaming_table(
+    name="01_wearable_bronze_stream",
+    comment="Append-only streaming bronze: micro-batches from configured wearables_zerobus (ZeroBus).",
+    table_properties={"quality": "bronze"},
 )
-@dlt.expect_or_drop("event_id_present", "event_id IS NOT NULL")
-@dlt.expect_or_drop("metric_present", "metric_type IS NOT NULL")
-def wearable_events_silver():
-    base = _silver_event_frame(_bronze_df())
-    w = Window.partitionBy("event_id").orderBy(
-        F.col("effective_time").desc_nulls_last(),
-        F.col("ingested_at").desc_nulls_last(),
-    )
+
+
+@append_flow(
+    target="01_wearable_bronze_stream",
+    name="zerobus_bronze_delta_stream",
+    comment="Lakeflow reads ZeroBus UC Delta; append-only rows into pipeline bronze streaming table.",
+)
+def zerobus_bronze_delta_stream():
+    fqn = _bronze_fqn()
     return (
-        base.withColumn("_rn", F.row_number().over(w))
-        .filter(F.col("_rn") == F.lit(1))
-        .drop("_rn")
+        spark.readStream.format("delta")
+        .table(fqn)
+        .filter(_ingest_channel_filter())
+        .withWatermark("ingested_at", "72 hours")
+        .select(
+            "record_id",
+            "ingested_at",
+            "body",
+            "headers",
+            "record_type",
+            "source_platform",
+            "user_id",
+        )
     )
 
 
-@dlt.table(
-    name="wearable_hk_quantity_samples_silver",
-    comment="Apple HealthKit quantity samples (record_type = samples).",
+# ---------------------------------------------------------------------------
+# Streaming silver — append-only (watermark + dropDuplicates on keys)
+# ---------------------------------------------------------------------------
+
+create_streaming_table(
+    name="01_wearable_events_silver",
+    comment="Append-only streaming silver: normalized events; dropDuplicates(event_id) within watermark.",
     table_properties={"quality": "silver"},
 )
-def wearable_hk_quantity_samples_silver():
+
+
+@append_flow(
+    target="01_wearable_events_silver",
+    name="bronze_stream_into_events_silver",
+    comment="Bronze stream → normalized event rows.",
+)
+def bronze_stream_into_events_silver():
+    b = _read_stream("01_wearable_bronze_stream")
+    base = _silver_event_frame(b)
+    return (
+        base.filter(F.col("event_id").isNotNull() & F.col("metric_type").isNotNull())
+        .withWatermark("ingested_at", "48 hours")
+        .dropDuplicates(["event_id"])
+    )
+
+
+create_streaming_table(
+    name="01_wearable_hk_quantity_samples_silver",
+    comment="Append-only HK quantity samples; dropDuplicates(hk_uuid) within watermark.",
+    table_properties={"quality": "silver"},
+)
+
+
+@append_flow(
+    target="01_wearable_hk_quantity_samples_silver",
+    name="bronze_stream_into_hk_samples_silver",
+    comment="Bronze stream → HK quantity sample rows.",
+)
+def bronze_stream_into_hk_samples_silver():
     j = _json_body_col()
-    df = _bronze_df().filter(F.col("record_type") == F.lit("samples"))
-    return df.select(
+    b = _read_stream("01_wearable_bronze_stream").filter(F.col("record_type") == F.lit("samples"))
+    selected = b.select(
         F.col("record_id"),
         F.col("ingested_at"),
         F.col("user_id"),
-        F.get_json_object(j, "$.uuid").alias("hk_uuid"),
+        F.coalesce(F.get_json_object(j, "$.uuid"), F.col("record_id").cast("string")).alias("hk_uuid"),
         F.get_json_object(j, "$.type").alias("hk_type"),
         F.get_json_object(j, "$.unit").alias("hk_unit"),
         F.get_json_object(j, "$.value").cast("double").alias("value"),
-        F.to_timestamp(F.get_json_object(j, "$.start_date"), "yyyy-MM-dd'T'HH:mm:ssXXX").alias("start_at"),
-        F.to_timestamp(F.get_json_object(j, "$.end_date"), "yyyy-MM-dd'T'HH:mm:ssXXX").alias("end_at"),
+        _parse_hk_iso_timestamp(F.get_json_object(j, "$.start_date")).alias("start_at"),
+        _parse_hk_iso_timestamp(F.get_json_object(j, "$.end_date")).alias("end_at"),
         F.get_json_object(j, "$.source_name").alias("source_name"),
     ).where(F.col("hk_type").isNotNull())
+    return selected.withWatermark("ingested_at", "36 hours").dropDuplicates(["hk_uuid"])
 
 
-@dlt.table(
-    name="wearable_workouts_silver",
-    comment="Apple HealthKit workouts (record_type = workouts).",
+create_streaming_table(
+    name="01_wearable_workouts_silver",
+    comment="Append-only workouts; dropDuplicates(workout_uuid) within watermark.",
     table_properties={"quality": "silver"},
 )
-def wearable_workouts_silver():
+
+
+@append_flow(
+    target="01_wearable_workouts_silver",
+    name="bronze_stream_into_workouts_silver",
+    comment="Bronze stream → workout rows.",
+)
+def bronze_stream_into_workouts_silver():
     j = _json_body_col()
-    df = _bronze_df().filter(F.col("record_type") == F.lit("workouts"))
-    return df.select(
+    b = _read_stream("01_wearable_bronze_stream").filter(F.col("record_type") == F.lit("workouts"))
+    sel = b.select(
         F.col("record_id"),
         F.col("ingested_at"),
         F.col("user_id"),
-        F.get_json_object(j, "$.uuid").alias("workout_uuid"),
+        F.coalesce(F.get_json_object(j, "$.uuid"), F.col("record_id").cast("string")).alias("workout_uuid"),
         F.get_json_object(j, "$.activity_type").alias("activity_type"),
         F.get_json_object(j, "$.activity_type_raw").cast("long").alias("activity_type_raw"),
-        F.to_timestamp(F.get_json_object(j, "$.start_date"), "yyyy-MM-dd'T'HH:mm:ssXXX").alias("start_at"),
-        F.to_timestamp(F.get_json_object(j, "$.end_date"), "yyyy-MM-dd'T'HH:mm:ssXXX").alias("end_at"),
+        _parse_hk_iso_timestamp(F.get_json_object(j, "$.start_date")).alias("start_at"),
+        _parse_hk_iso_timestamp(F.get_json_object(j, "$.end_date")).alias("end_at"),
         F.get_json_object(j, "$.duration_seconds").cast("double").alias("duration_seconds"),
         F.get_json_object(j, "$.total_energy_burned_kcal").cast("double").alias("total_energy_burned_kcal"),
         F.get_json_object(j, "$.total_distance_meters").cast("double").alias("total_distance_meters"),
         F.get_json_object(j, "$.source_name").alias("source_name"),
     )
+    return sel.withWatermark("ingested_at", "48 hours").dropDuplicates(["workout_uuid"])
 
 
-@dlt.table(
-    name="wearable_sleep_stages_silver",
-    comment="Exploded per-stage rows from Apple HealthKit sleep JSON.",
+create_streaming_table(
+    name="01_wearable_sleep_stages_silver",
+    comment="Append-only exploded sleep stages; dropDuplicates(stage_uuid) within watermark.",
     table_properties={"quality": "silver"},
 )
-def wearable_sleep_stages_silver():
+
+
+@append_flow(
+    target="01_wearable_sleep_stages_silver",
+    name="bronze_stream_into_sleep_stages_silver",
+    comment="Bronze stream → exploded sleep stage rows.",
+)
+def bronze_stream_into_sleep_stages_silver():
     j = _json_body_col()
     stage_schema = ArrayType(
         StructType(
@@ -166,13 +292,13 @@ def wearable_sleep_stages_silver():
             ]
         )
     )
-    df = _bronze_df().filter(F.col("record_type") == F.lit("sleep"))
-    parsed = df.select(
+    b = _read_stream("01_wearable_bronze_stream").filter(F.col("record_type") == F.lit("sleep"))
+    parsed = b.select(
         F.col("record_id").alias("sleep_record_id"),
         F.col("ingested_at"),
         F.col("user_id"),
-        F.to_timestamp(F.get_json_object(j, "$.start_date"), "yyyy-MM-dd'T'HH:mm:ssXXX").alias("session_start_at"),
-        F.to_timestamp(F.get_json_object(j, "$.end_date"), "yyyy-MM-dd'T'HH:mm:ssXXX").alias("session_end_at"),
+        _parse_hk_iso_timestamp(F.get_json_object(j, "$.start_date")).alias("session_start_at"),
+        _parse_hk_iso_timestamp(F.get_json_object(j, "$.end_date")).alias("session_end_at"),
         F.from_json(F.get_json_object(j, "$.stages"), stage_schema).alias("stages"),
     )
     exploded = parsed.filter(F.size(F.col("stages")) > 0).select(
@@ -183,28 +309,47 @@ def wearable_sleep_stages_silver():
         "session_end_at",
         F.explode_outer("stages").alias("st"),
     )
-    return exploded.select(
+    out = exploded.select(
         F.col("sleep_record_id"),
         F.col("ingested_at"),
         F.col("user_id"),
         F.col("session_start_at"),
         F.col("session_end_at"),
-        F.col("st.uuid").alias("stage_uuid"),
+        F.coalesce(
+            F.col("st.uuid").cast("string"),
+            F.sha2(
+                F.concat_ws(
+                    "|",
+                    F.col("sleep_record_id").cast("string"),
+                    F.col("st.stage").cast("string"),
+                    F.col("st.start_date").cast("string"),
+                ),
+                256,
+            ),
+        ).alias("stage_uuid"),
         F.col("st.stage").alias("sleep_stage"),
-        F.to_timestamp(F.col("st.start_date"), "yyyy-MM-dd'T'HH:mm:ssXXX").alias("stage_start_at"),
-        F.to_timestamp(F.col("st.end_date"), "yyyy-MM-dd'T'HH:mm:ssXXX").alias("stage_end_at"),
+        _parse_hk_iso_timestamp(F.col("st.start_date")).alias("stage_start_at"),
+        _parse_hk_iso_timestamp(F.col("st.end_date")).alias("stage_end_at"),
     )
+    return out.withWatermark("ingested_at", "48 hours").dropDuplicates(["stage_uuid"])
 
 
-@dlt.table(
-    name="wearable_activity_ring_daily_silver",
-    comment="Daily Activity ring summaries (Move / Exercise / Stand).",
+create_streaming_table(
+    name="01_wearable_activity_ring_daily_silver",
+    comment="Append-only activity ring summaries; dropDuplicates(record_id) within watermark.",
     table_properties={"quality": "silver"},
 )
-def wearable_activity_ring_daily_silver():
+
+
+@append_flow(
+    target="01_wearable_activity_ring_daily_silver",
+    name="bronze_stream_into_activity_ring_silver",
+    comment="Bronze stream → daily activity ring rows.",
+)
+def bronze_stream_into_activity_ring_silver():
     j = _json_body_col()
-    df = _bronze_df().filter(F.col("record_type") == F.lit("activity_summaries"))
-    return df.select(
+    b = _read_stream("01_wearable_bronze_stream").filter(F.col("record_type") == F.lit("activity_summaries"))
+    sel = b.select(
         F.col("record_id"),
         F.col("ingested_at"),
         F.col("user_id"),
@@ -216,32 +361,41 @@ def wearable_activity_ring_daily_silver():
         F.get_json_object(j, "$.stand_hours").cast("long").alias("stand_hours"),
         F.get_json_object(j, "$.stand_hours_goal").cast("long").alias("stand_hours_goal"),
     ).where(F.col("summary_date").isNotNull())
+    return sel.withWatermark("ingested_at", "48 hours").dropDuplicates(["record_id"])
 
 
-@dlt.table(
-    name="wearable_deletes_silver",
-    comment="Deletion rows (UUID + sample_type) for soft-delete joins.",
+create_streaming_table(
+    name="01_wearable_deletes_silver",
+    comment="Append-only delete rows; dropDuplicates(record_id) within watermark.",
     table_properties={"quality": "silver"},
 )
-def wearable_deletes_silver():
+
+
+@append_flow(
+    target="01_wearable_deletes_silver",
+    name="bronze_stream_into_deletes_silver",
+    comment="Bronze stream → delete rows.",
+)
+def bronze_stream_into_deletes_silver():
     j = _json_body_col()
-    df = _bronze_df().filter(F.col("record_type") == F.lit("deletes"))
-    return df.select(
+    b = _read_stream("01_wearable_bronze_stream").filter(F.col("record_type") == F.lit("deletes"))
+    sel = b.select(
         F.col("record_id"),
         F.col("ingested_at"),
         F.col("user_id"),
         F.get_json_object(j, "$.uuid").alias("deleted_uuid"),
         F.get_json_object(j, "$.sample_type").alias("deleted_sample_type"),
     )
+    return sel.withWatermark("ingested_at", "48 hours").dropDuplicates(["record_id"])
 
 
 @dlt.table(
-    name="wearable_hk_quantity_daily_gold",
+    name="01_wearable_hk_quantity_daily_gold",
     comment="Daily aggregates for HK quantity samples (dashboard-friendly).",
     table_properties={"quality": "gold"},
 )
 def wearable_hk_quantity_daily_gold():
-    q = dlt.read("wearable_hk_quantity_samples_silver")
+    q = dlt.read("01_wearable_hk_quantity_samples_silver")
     return (
         q.filter(F.col("hk_type").isNotNull() & F.col("value").isNotNull())
         .groupBy(
@@ -259,12 +413,12 @@ def wearable_hk_quantity_daily_gold():
 
 
 @dlt.table(
-    name="wearable_subject_daily_gold",
+    name="01_wearable_subject_daily_gold",
     comment="Daily aggregates across all normalized event types (numeric values only).",
     table_properties={"quality": "gold"},
 )
 def wearable_subject_daily_gold():
-    silver = dlt.read("wearable_events_silver")
+    silver = dlt.read("01_wearable_events_silver")
     return (
         silver.filter(F.col("value_number").isNotNull())
         .groupBy(
@@ -287,12 +441,12 @@ def wearable_subject_daily_gold():
 
 
 @dlt.table(
-    name="wearable_gold_daily_steps",
+    name="01_wearable_gold_daily_steps",
     comment="Per-user daily step totals from HKQuantityTypeIdentifierStepCount samples.",
     table_properties={"quality": "gold"},
 )
 def wearable_gold_daily_steps():
-    q = dlt.read("wearable_hk_quantity_samples_silver")
+    q = dlt.read("01_wearable_hk_quantity_samples_silver")
     day = F.to_date(F.col("start_at"))
     return (
         q.filter(F.col("hk_type").contains("StepCount"))
@@ -306,13 +460,13 @@ def wearable_gold_daily_steps():
 
 
 @dlt.table(
-    name="wearable_gold_activity_enriched_daily",
+    name="01_wearable_gold_activity_enriched_daily",
     comment="Activity rings merged with daily step totals and goal ratios.",
     table_properties={"quality": "gold"},
 )
 def wearable_gold_activity_enriched_daily():
-    ring = dlt.read("wearable_activity_ring_daily_silver").withColumnRenamed("summary_date", "day")
-    steps = dlt.read("wearable_gold_daily_steps")
+    ring = dlt.read("01_wearable_activity_ring_daily_silver").withColumnRenamed("summary_date", "day")
+    steps = dlt.read("01_wearable_gold_daily_steps")
     joined = ring.join(steps, on=["user_id", "day"], how="left")
     return joined.select(
         F.col("user_id"),
@@ -341,12 +495,12 @@ def wearable_gold_activity_enriched_daily():
 
 
 @dlt.table(
-    name="wearable_gold_sleep_nightly",
+    name="01_wearable_gold_sleep_nightly",
     comment="Per-night sleep minutes by stage (Apple sleep stage strings).",
     table_properties={"quality": "gold"},
 )
 def wearable_gold_sleep_nightly():
-    st = dlt.read("wearable_sleep_stages_silver").filter(
+    st = dlt.read("01_wearable_sleep_stages_silver").filter(
         F.col("stage_start_at").isNotNull() & F.col("stage_end_at").isNotNull()
     )
     mins = (F.unix_timestamp("stage_end_at") - F.unix_timestamp("stage_start_at")) / F.lit(60.0)
@@ -377,12 +531,12 @@ def wearable_gold_sleep_nightly():
 
 
 @dlt.table(
-    name="wearable_gold_weekly_workout_summary",
+    name="01_wearable_gold_weekly_workout_summary",
     comment="Weekly workout volume and intensity proxies per user.",
     table_properties={"quality": "gold"},
 )
 def wearable_gold_weekly_workout_summary():
-    w = dlt.read("wearable_workouts_silver").filter(F.col("start_at").isNotNull())
+    w = dlt.read("01_wearable_workouts_silver").filter(F.col("start_at").isNotNull())
     week = F.date_trunc("week", F.col("start_at"))
     return (
         w.groupBy("user_id", week.alias("week_start"))
@@ -401,12 +555,12 @@ def wearable_gold_weekly_workout_summary():
 
 
 @dlt.table(
-    name="wearable_gold_cardio_vitals_daily",
+    name="01_wearable_gold_cardio_vitals_daily",
     comment="Daily resting HR, HRV (SDNN), and SpO2 averages when present.",
     table_properties={"quality": "gold"},
 )
 def wearable_gold_cardio_vitals_daily():
-    hq = dlt.read("wearable_hk_quantity_samples_silver").filter(F.col("start_at").isNotNull())
+    hq = dlt.read("01_wearable_hk_quantity_samples_silver").filter(F.col("start_at").isNotNull())
     day = F.to_date(F.col("start_at"))
     rhr = (
         hq.filter(F.col("hk_type").contains("RestingHeartRate"))
@@ -434,13 +588,13 @@ def wearable_gold_cardio_vitals_daily():
 
 
 @dlt.table(
-    name="wearable_gold_heart_rate_intraday_daily",
+    name="01_wearable_gold_heart_rate_intraday_daily",
     comment="All non-resting heart-rate samples aggregated per calendar day.",
     table_properties={"quality": "gold"},
 )
 def wearable_gold_heart_rate_intraday_daily():
     hq = (
-        dlt.read("wearable_hk_quantity_samples_silver")
+        dlt.read("01_wearable_hk_quantity_samples_silver")
         .filter(F.col("hk_type").contains("HeartRate"))
         .filter(~F.col("hk_type").contains("Resting"))
         .filter(F.col("value").isNotNull())
@@ -455,24 +609,24 @@ def wearable_gold_heart_rate_intraday_daily():
 
 
 @dlt.table(
-    name="wearable_gold_bronze_ingest_daily",
+    name="01_wearable_gold_bronze_ingest_daily",
     comment="Bronze ingest volume by day, user, and record_type (long form for charts).",
     table_properties={"quality": "gold"},
 )
 def wearable_gold_bronze_ingest_daily():
-    b = _bronze_df()
+    b = dlt.read("01_wearable_bronze_stream")
     return b.groupBy(F.to_date("ingested_at").alias("ingest_day"), "user_id", "record_type").agg(
         F.count(F.lit(1)).alias("row_count")
     )
 
 
 @dlt.table(
-    name="wearable_gold_hk_family_weekly",
+    name="01_wearable_gold_hk_family_weekly",
     comment="Weekly rollups of HK metric family (steps, energy, distance, etc.) for trend charts.",
     table_properties={"quality": "gold"},
 )
 def wearable_gold_hk_family_weekly():
-    hq = dlt.read("wearable_hk_quantity_samples_silver").filter(F.col("value").isNotNull())
+    hq = dlt.read("01_wearable_hk_quantity_samples_silver").filter(F.col("value").isNotNull())
     week = F.date_trunc("week", F.col("start_at"))
     family = (
         F.when(F.col("hk_type").contains("StepCount"), F.lit("steps"))
@@ -500,31 +654,33 @@ def wearable_gold_hk_family_weekly():
 
 
 @dlt.view(
-    name="wearable_vw_gold_activity_last_45d",
+    name="01_wearable_vw_gold_activity_last_45d",
     comment="Last 45 days of enriched daily activity KPIs.",
 )
 def wearable_vw_gold_activity_last_45d():
-    g = dlt.read("wearable_gold_activity_enriched_daily")
+    g = dlt.read("01_wearable_gold_activity_enriched_daily")
     cutoff = F.date_sub(F.current_date(), 45)
     return g.filter(F.col("day") >= cutoff)
 
 
 @dlt.view(
-    name="wearable_vw_gold_sleep_last_30_sessions",
+    name="01_wearable_vw_gold_sleep_last_30_sessions",
     comment="Sleep nightly totals for the most recent 30 calendar nights per user.",
 )
 def wearable_vw_gold_sleep_last_30_sessions():
-    s = dlt.read("wearable_gold_sleep_nightly")
+    s = dlt.read("01_wearable_gold_sleep_nightly")
     w = Window.partitionBy("user_id").orderBy(F.col("sleep_night").desc())
     ranked = s.withColumn("_rn", F.row_number().over(w))
     return ranked.filter(F.col("_rn") <= 30).drop("_rn")
 
 
 @dlt.view(
-    name="wearable_vw_gold_workouts_recent",
+    name="01_wearable_vw_gold_workouts_recent",
     comment="Weekly workout summary for the last 12 weeks.",
 )
 def wearable_vw_gold_workouts_recent():
-    w = dlt.read("wearable_gold_weekly_workout_summary")
+    w = dlt.read("01_wearable_gold_weekly_workout_summary")
     cutoff = F.date_sub(F.current_timestamp(), 84)
     return w.filter(F.col("week_start") >= cutoff)
+
+

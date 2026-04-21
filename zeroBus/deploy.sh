@@ -138,6 +138,40 @@ command -v python3    &>/dev/null || fail "python3 not found (required for JSON 
 # --------------------------------------------------------------------------- #
 # deploy_bundle — validate and deploy (or destroy) a single bundle
 # --------------------------------------------------------------------------- #
+# publish_wearables_app_runtime — `databricks apps deploy` so the App resource runs uploaded source
+# (without this, Apps UI shows UNAVAILABLE: "Run your app by deploying source code").
+publish_wearables_app_runtime() {
+  local bundle_dir="${SCRIPT_DIR}/${APP_BUNDLE}"
+  log "Publishing Databricks App runtime (source deploy)…"
+  local summary_json
+  summary_json="$(cd "${bundle_dir}" && databricks bundle summary --target "${TARGET}" --output json 2>&1)" || {
+    warn "Could not read bundle summary — skipping databricks apps deploy."
+    return 0
+  }
+  local file_path app_name src_path
+  file_path="$(echo "${summary_json}" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('workspace',{}).get('file_path','') or '')")"
+  app_name="$(echo "${summary_json}" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for _k,v in (d.get('resources') or {}).get('apps',{}).items():
+    if isinstance(v,dict) and v.get('name'):
+        print(v['name'])
+        break
+")"
+  if [[ -z "${file_path}" || -z "${app_name}" ]]; then
+    warn "Could not resolve workspace file_path or app name — skipping databricks apps deploy."
+    return 0
+  fi
+  src_path="${file_path}/src/app"
+  log "  App: ${app_name}"
+  log "  Source: ${src_path}"
+  (cd "${bundle_dir}" && databricks apps deploy "${app_name}" --target "${TARGET}" --source-code-path "${src_path}" --skip-validation) || {
+    warn "databricks apps deploy failed — open Apps in the UI or run: cd ${APP_BUNDLE} && databricks apps deploy ${app_name} --target ${TARGET} --source-code-path \"${src_path}\" --skip-validation"
+    return 0
+  }
+  ok "Databricks App source published: ${app_name}"
+}
+
 deploy_bundle() {
   local bundle_name="$1"
   local bundle_dir="${SCRIPT_DIR}/${bundle_name}"
@@ -574,6 +608,11 @@ fi
 # Step 4: Deploy app bundle
 if [[ "${DEPLOY_APP}" == true ]]; then
   deploy_bundle "${APP_BUNDLE}"
+fi
+
+# Step 5: Publish Databricks App *source* (bundle deploy only syncs files; apps stay UNAVAILABLE until this runs)
+if [[ "${DEPLOY_APP}" == true ]] && [[ "${VALIDATE_ONLY}" != true ]] && [[ "${DESTROY}" != true ]]; then
+  publish_wearables_app_runtime
 fi
 
 log "Done."

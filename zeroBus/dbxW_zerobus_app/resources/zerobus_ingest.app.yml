@@ -6,9 +6,11 @@
 # TypeScript SDK (@databricks/zerobus-ingest-sdk).
 #
 # Architecture:
-#   iOS App (HealthKit) → POST → this App (AppKit / Express)
-#     → ZeroBus TypeScript SDK → wearables_zerobus bronze table
-#     → Lakebase (Postgres) → app state, sessions, sync metadata
+#   Client (Apple HealthKit iOS app | /docs NDJSON demo batches | future sources)
+#     → POST /api/v1/healthkit/ingest → ZeroBus TypeScript SDK
+#     → wearables_zerobus bronze (append-only UC Delta)
+#     → Spark Declarative Pipelines: single pipeline (wearable_medallion.py — streaming STs + gold MVs)
+#     → Lakebase (Postgres) → app state (sample todos / future auth registry)
 #
 # Stack:
 #   Backend:  @databricks/appkit (Express server, plugin architecture)
@@ -38,16 +40,22 @@
 resources:
   apps:
     zerobus_ingest:
-      name: zerobus-demo-ui
+      name: dbx-wearables-studio
 
       description: >
         AppKit (Node.js + React) application for wearable health data
-        ingestion via ZeroBus. Receives HealthKit JSON POSTs from the
-        iOS app through a custom Express route and streams request
-        payload + HTTP headers to the Unity Catalog bronze table
-        (wearables_zerobus) via the @databricks/zerobus-ingest-sdk.
-        Authenticates to ZeroBus using the dedicated SPN credentials
-        stored in the infra bundle's secret scope.
+        ingestion via ZeroBus and live lakehouse analytics. Receives HealthKit
+        JSON POSTs from the iOS app, streams payloads to Unity Catalog bronze
+        (wearables_zerobus), and serves SQL-powered KPIs and charts against
+        gold tables through the AppKit analytics plugin.
+
+      # Pipeline env (bundle) — mirrored in src/app/app.yaml: AppKit only injects env from app.yaml at runtime.
+      config:
+        env:
+          - name: WEARABLE_PIPELINE_ID
+            value: ${var.wearable_medallion_pipeline_id}
+          - name: WEARABLE_PIPELINE_NAME
+            value: ${var.wearable_medallion_pipeline_name}
 
       source_code_path: ../src/app
 
@@ -115,6 +123,13 @@ resources:
             database: ${var.postgres_database}
             permission: CAN_CONNECT_AND_CREATE
 
+        # Pro SQL warehouse — AppKit analytics plugin (Insights dashboard)
+        - name: wearables-sql-warehouse
+          description: SQL warehouse for querying UC gold tables from the Insights UI
+          sql_warehouse:
+            id: ${var.sql_warehouse_id}
+            permission: CAN_USE
+
       # Base permissions — all workspace users can use the app
       permissions:
         - user_name: ankur.nayyar@databricks.com
@@ -131,7 +146,7 @@ targets:
     resources:
       apps:
         zerobus_ingest:
-          name: zerobus-demo-ui
+          name: dbx-wearables-studio
           permissions:
             - user_name: ankur.nayyar@databricks.com
               level: CAN_MANAGE
@@ -142,7 +157,7 @@ targets:
     resources:
       apps:
         zerobus_ingest:
-          name: zerobus-demo-ui
+          name: dbx-wearables-studio
           permissions:
             - user_name: ankur.nayyar@databricks.com
               level: CAN_MANAGE
