@@ -9,9 +9,9 @@ import { DltProgressPage } from '@/pages/dlt/DltProgressPage';
 
 function Layout() {
   return (
-    <div className="min-h-screen bg-[var(--background)] flex flex-col">
+    <div className="min-h-screen bg-[var(--background)] flex flex-col font-sans antialiased text-[var(--foreground)]">
       <Navbar />
-      <main className="flex-1">
+      <main className="flex-1 min-h-0">
         <Outlet />
       </main>
       <Footer />

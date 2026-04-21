@@ -95,7 +95,7 @@ export function InteractiveSeriesChart({
 
   if (!points.length) {
     return (
-      <div className="h-24 flex items-center text-sm text-muted-foreground">{emptyMessage}</div>
+      <div className="h-24 flex items-center text-sm text-[var(--muted-foreground)]">{emptyMessage}</div>
     );
   }
 
@@ -144,10 +144,11 @@ export function InteractiveSeriesChart({
               x2={PAD_L + innerW}
               y1={t.y}
               y2={t.y}
-              stroke="rgba(255,255,255,0.06)"
+              stroke="var(--border)"
+              strokeOpacity={0.85}
               strokeDasharray="4 4"
             />
-            <text x={4} y={t.y + 4} fill="rgba(148,163,184,0.9)" fontSize="10">
+            <text x={4} y={t.y + 4} fill="var(--muted-foreground)" fontSize="10">
               {t.label}
             </text>
           </g>
@@ -165,35 +166,43 @@ export function InteractiveSeriesChart({
 
         {hx != null && hy != null ? (
           <g>
-            <line x1={hx} x2={hx} y1={PAD_T} y2={PAD_T + innerH} stroke="rgba(255,255,255,0.25)" strokeWidth="1" />
-            <circle cx={hx} cy={hy} r={5} fill={accent} stroke="rgba(0,0,0,0.35)" strokeWidth="1" />
+            <line
+              x1={hx}
+              x2={hx}
+              y1={PAD_T}
+              y2={PAD_T + innerH}
+              stroke="var(--foreground)"
+              strokeOpacity={0.2}
+              strokeWidth="1"
+            />
+            <circle cx={hx} cy={hy} r={5} fill={accent} stroke="var(--border)" strokeWidth="1" />
           </g>
         ) : null}
       </svg>
 
       {hi && hoverIdx != null ? (
         <div
-          className="pointer-events-none absolute z-10 min-w-[180px] max-w-[min(92vw,280px)] rounded-lg border border-white/15 bg-[rgba(15,23,42,0.96)] px-3 py-2 text-xs shadow-xl shadow-black/40"
+          className="pointer-events-none absolute z-10 min-w-[180px] max-w-[min(92vw,280px)] rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs text-[var(--card-foreground)] shadow-xl shadow-black/15"
           style={{
             left: clamp(layout.relX - 90, 8, Math.max(16, layout.width - 188)),
             top: 4,
           }}
         >
-          <p className="font-medium text-white/95 tabular-nums">{hi.xLabel}</p>
-          <p className="mt-1 text-gray-300">
-            <span className="text-gray-500">{valueLabel}: </span>
-            <span className="text-white tabular-nums">{formatY(hi.y)}</span>
+          <p className="font-medium tabular-nums text-[var(--foreground)]">{hi.xLabel}</p>
+          <p className="mt-1 text-[var(--muted-foreground)]">
+            <span>{valueLabel}: </span>
+            <span className="text-[var(--foreground)] tabular-nums font-medium">{formatY(hi.y)}</span>
           </p>
           {hi.tooltipExtra?.map((row) => (
-            <p key={row.label} className="mt-0.5 text-gray-400">
-              <span className="text-gray-500">{row.label}: </span>
-              <span className="text-gray-200 tabular-nums">{row.value}</span>
+            <p key={row.label} className="mt-0.5 text-[var(--muted-foreground)]">
+              <span>{row.label}: </span>
+              <span className="text-[var(--foreground)] tabular-nums">{row.value}</span>
             </p>
           ))}
         </div>
       ) : null}
 
-      <p className="mt-1 text-[10px] text-gray-500 px-1">Hover or drag across the chart for values.</p>
+      <p className="mt-1 text-[10px] text-[var(--muted-foreground)] px-1">Hover or drag across the chart for values.</p>
     </div>
   );
 }

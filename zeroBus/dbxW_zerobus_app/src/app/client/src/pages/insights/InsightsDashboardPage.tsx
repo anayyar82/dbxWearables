@@ -355,7 +355,7 @@ export function InsightsDashboardPage() {
   const rangeLabel = `${appliedStart} → ${appliedEnd}`;
 
   return (
-    <div className="min-h-screen bg-[var(--background)]">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] antialiased">
       <section className="gradient-hero text-white border-b border-white/10 py-16 px-6 relative overflow-hidden">
         <div className="absolute inset-0 opacity-[0.04] pointer-events-none">
           <img
@@ -367,15 +367,15 @@ export function InsightsDashboardPage() {
         </div>
         <div className="max-w-7xl mx-auto relative z-10">
           <p className="text-xs font-bold uppercase tracking-widest text-[var(--dbx-lava-400)] mb-2">Lakehouse analytics</p>
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">Wearables insights</h1>
-          <p className="mt-4 text-lg text-gray-300 max-w-2xl leading-relaxed">
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-white">Wearables insights</h1>
+          <p className="mt-4 text-lg text-gray-200 max-w-2xl leading-relaxed">
             Filterable KPIs and trends from Unity Catalog gold tables via Databricks SQL. Adjust the window, narrow by
             user id substring, and slice ingest by record type — then apply to refresh every panel together.
           </p>
         </div>
       </section>
 
-      <div className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--background)]/95 backdrop-blur-md">
+      <div className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--background)]/95 backdrop-blur-md supports-[backdrop-filter]:bg-[var(--background)]/80">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-lg shadow-black/10">
             <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -476,7 +476,7 @@ export function InsightsDashboardPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-10">
+      <div className="max-w-7xl mx-auto px-6 py-10 bg-[var(--background)]">
         <QueryState loading={kpis.loading} error={kpis.error} />
         {!kpis.loading && !kpis.error ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-12">

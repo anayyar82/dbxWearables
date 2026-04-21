@@ -23,7 +23,6 @@ import {
   BRONZE_STREAM_TABLE,
   findInsightForPublishedTable,
   findInsightForGoldTable,
-  findInsightForTable,
   formatInt,
   formatRelativeTime,
   GOLD_MATERIALIZED_TABLES,
@@ -168,7 +167,9 @@ function MedallionArchitectureBar({
     <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 md:p-8 ring-1 ring-black/[0.04] dark:ring-white/[0.06] shadow-xl shadow-black/10">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5 mb-6">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-500/80 mb-1.5">Architecture</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dbx-lava-600)] dark:text-[var(--dbx-lava-400)] mb-1.5">
+            Architecture
+          </p>
           <h2 className="text-xl md:text-2xl font-bold text-[var(--foreground)] tracking-tight">ZeroBus medallion progress</h2>
           <p className="text-sm text-[var(--muted-foreground)] mt-2.5 max-w-2xl leading-relaxed">
             Live read of ingest counters in this app plus DLT{' '}
@@ -550,10 +551,10 @@ export function DltProgressPage() {
               <p className="text-xs font-bold uppercase tracking-widest text-[var(--dbx-lava-400)] mb-2">
                 End-to-end status
               </p>
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight leading-tight">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight leading-tight text-white">
                 ZeroBus → Lakehouse → DLT
               </h1>
-              <p className="mt-4 text-base md:text-lg text-gray-300 leading-relaxed max-w-2xl">
+              <p className="mt-4 text-base md:text-lg text-gray-200 leading-relaxed max-w-2xl">
                 Live view of how payloads land in Unity Catalog through ZeroBus, how Lakeflow moves them through
                 streaming bronze and silver, and how gold datasets refresh—using this app’s counters and your workspace
                 Pipelines API.
@@ -692,7 +693,7 @@ export function DltProgressPage() {
         </div>
       </section>
 
-      <div className="max-w-7xl mx-auto px-6 py-12 md:py-14 space-y-16">
+      <div className="max-w-7xl mx-auto px-6 py-12 md:py-14 space-y-16 bg-[var(--background)]">
         {!config?.workspace_api_configured ? (
           <div className="rounded-lg border border-amber-500/25 bg-amber-950/20 px-5 py-4 flex gap-3 text-sm text-amber-100/95 ring-1 ring-amber-500/10">
             <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-amber-400/90" />
